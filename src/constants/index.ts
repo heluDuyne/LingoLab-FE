@@ -57,12 +57,12 @@ export const USER_ROLES = {
 export const TEST_ACCOUNTS = {
   TEACHER: {
     username: "teacher",
-    email: "teacher@lingolab.com",
+    email: "teacher@test.com",
     password: "teacher123",
   },
   STUDENT: {
     username: "student",
-    email: "student@lingolab.com",
+    email: "student@test.com",
     password: "student123",
   },
 } as const;
