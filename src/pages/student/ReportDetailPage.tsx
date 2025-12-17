@@ -117,7 +117,7 @@ export function ReportDetailPage() {
   const submission = mockSubmission;
 
   const handleBack = () => {
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   if (!submission) {

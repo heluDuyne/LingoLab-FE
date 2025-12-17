@@ -36,7 +36,7 @@ export function ProfilePage() {
   };
 
   const handleCancel = () => {
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   return (

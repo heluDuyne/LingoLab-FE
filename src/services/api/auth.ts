@@ -17,18 +17,18 @@ const MOCK_USERS: Record<string, User> = {
     role: "teacher",
     createdAt: new Date().toISOString(),
   },
-  [TEST_ACCOUNTS.STUDENT.username]: {
-    id: "student-001",
-    username: TEST_ACCOUNTS.STUDENT.username,
-    email: TEST_ACCOUNTS.STUDENT.email,
+  [TEST_ACCOUNTS.LEARNER.username]: {
+    id: "learner-001",
+    username: TEST_ACCOUNTS.LEARNER.username,
+    email: TEST_ACCOUNTS.LEARNER.email,
     name: "Duy Pham",
-    role: "student",
+    role: "learner",
     createdAt: new Date().toISOString(),
   },
 };
 
 // Set to true to use mock authentication (no backend required)
-const USE_MOCK_AUTH = true;
+const USE_MOCK_AUTH = false;
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
@@ -37,17 +37,15 @@ export const authApi = {
       await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
 
       // Normalize inputs (trim whitespace, lowercase email)
-      const username = credentials.username.trim();
       const email = credentials.email.trim().toLowerCase();
       const password = credentials.password;
 
-      console.log("Login attempt:", { username, email, password });
+      console.log("Login attempt:", { email, password });
       console.log("Expected teacher:", TEST_ACCOUNTS.TEACHER);
-      console.log("Expected student:", TEST_ACCOUNTS.STUDENT);
+      console.log("Expected learner:", TEST_ACCOUNTS.LEARNER);
 
       // Check teacher credentials
       if (
-        username === TEST_ACCOUNTS.TEACHER.username &&
         email === TEST_ACCOUNTS.TEACHER.email.toLowerCase() &&
         password === TEST_ACCOUNTS.TEACHER.password
       ) {
@@ -57,15 +55,14 @@ export const authApi = {
         };
       }
 
-      // Check student credentials
+      // Check learner credentials
       if (
-        username === TEST_ACCOUNTS.STUDENT.username &&
-        email === TEST_ACCOUNTS.STUDENT.email.toLowerCase() &&
-        password === TEST_ACCOUNTS.STUDENT.password
+        email === TEST_ACCOUNTS.LEARNER.email.toLowerCase() &&
+        password === TEST_ACCOUNTS.LEARNER.password
       ) {
         return {
-          user: MOCK_USERS[TEST_ACCOUNTS.STUDENT.username],
-          token: "mock-jwt-token-student-" + Date.now(),
+          user: MOCK_USERS[TEST_ACCOUNTS.LEARNER.username],
+          token: "mock-jwt-token-learner-" + Date.now(),
         };
       }
 
@@ -87,10 +84,11 @@ export const authApi = {
 
       const newUser: User = {
         id: "user-" + Date.now(),
-        username: credentials.username,
+        // username removed
+        username: "temp-user", // Keep for type compat or refactor User type later
         email: credentials.email,
-        name: credentials.name,
-        role: credentials.role,
+        name: `${credentials.firstName} ${credentials.lastName}`,
+        role: credentials.role || "learner",
         createdAt: new Date().toISOString(),
       };
 

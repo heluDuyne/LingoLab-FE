@@ -23,7 +23,7 @@ export function Sidebar() {
     if (user?.role === "teacher") {
       navigate(ROUTES.TEACHER.PROFILE);
     } else {
-      navigate(ROUTES.STUDENT.PROFILE);
+      navigate(ROUTES.LEARNER.PROFILE);
     }
   };
 
@@ -54,7 +54,7 @@ export function Sidebar() {
                   <NavLink
                     key={item.href}
                     to={item.href}
-                    end={item.href === ROUTES.TEACHER.DASHBOARD || item.href === ROUTES.STUDENT.DASHBOARD}
+                    end={item.href === ROUTES.TEACHER.DASHBOARD || item.href === ROUTES.LEARNER.DASHBOARD}
                     className={({ isActive }) =>
                       cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",

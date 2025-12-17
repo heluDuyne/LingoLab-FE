@@ -55,12 +55,12 @@ export const studentNavigation: NavSection[] = [
     items: [
       {
         title: "Dashboard",
-        href: ROUTES.STUDENT.DASHBOARD,
+        href: ROUTES.LEARNER.DASHBOARD,
         icon: LayoutDashboard,
       },
       {
         title: "Progress",
-        href: ROUTES.STUDENT.PROGRESS,
+        href: ROUTES.LEARNER.PROGRESS,
         icon: BarChart3,
       },
     ],
@@ -70,7 +70,7 @@ export const studentNavigation: NavSection[] = [
 // Get navigation based on role
 export const getNavigationByRole = (role: UserRole): NavSection[] => {
   switch (role) {
-    case "student":
+    case "learner":
       return studentNavigation;
     case "teacher":
       return teacherNavigation;

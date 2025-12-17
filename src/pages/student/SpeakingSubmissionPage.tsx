@@ -109,7 +109,7 @@ export function SpeakingSubmissionPage() {
   };
 
   const handleBack = () => {
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   const handleSaveDraft = () => {
@@ -130,7 +130,7 @@ export function SpeakingSubmissionPage() {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     setShowConfirmDialog(false);
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   const getDaysUntilDue = () => {

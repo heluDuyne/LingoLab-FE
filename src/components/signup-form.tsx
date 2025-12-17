@@ -6,16 +6,22 @@ import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { useAuthStore } from "@/stores";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
 
-const signUpSchema = z.object({
-  lastname: z.string().min(1, { message: "Họ là bắt buộc" }),
-  firstname: z.string().min(1, { message: "Tên là bắt buộc" }),
-  username: z
-    .string()
-    .min(3, { message: "Tên đăng nhập phải có ít nhất 3 ký tự" }),
-  email: z.string().email({ message: "Email không hợp lệ" }),
-  password: z.string().min(8, { message: "Mật khẩu phải có ít nhất 8 ký tự" }),
-});
+const signUpSchema = z
+  .object({
+    lastname: z.string().min(1, { message: "Họ là bắt buộc" }),
+    firstname: z.string().min(1, { message: "Tên là bắt buộc" }),
+    email: z.string().email({ message: "Email không hợp lệ" }),
+    password: z.string().min(8, { message: "Mật khẩu phải có ít nhất 8 ký tự" }),
+    confirmPassword: z.string().min(8, { message: "Xác nhận mật khẩu phải có ít nhất 8 ký tự" }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Mật khẩu không khớp",
+    path: ["confirmPassword"],
+  });
 
 type SignUpFormValues = z.infer<typeof signUpSchema>;
 
@@ -23,16 +29,33 @@ export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const { register: registerUser, isLoading } = useAuthStore();
+  const navigate = useNavigate();
+
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<SignUpFormValues>({
     resolver: zodResolver(signUpSchema),
   });
 
-  const onSubmit = (data: SignUpFormValues) => {
-    // Goi API backend
+  const onSubmit = async (data: SignUpFormValues) => {
+    try {
+      await registerUser({
+        email: data.email,
+        password: data.password,
+        confirmPassword: data.confirmPassword,
+        firstName: data.firstname,
+        lastName: data.lastname,
+      });
+      toast.success("Đăng ký thành công!");
+      navigate("/signin");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Đăng ký thất bại"
+      );
+    }
   };
 
   return (
@@ -82,24 +105,7 @@ export function SignupForm({
                   )}
                 </div>
               </div>
-              {/* Username*/}
-              <div className='flex flex-col gap-3'>
-                <Label htmlFor='username' className='block text-sm'>
-                  Tên đăng nhập
-                </Label>
-                <Input
-                  id='username'
-                  type='text'
-                  placeholder='Tên đăng nhập'
-                  {...register("username")}
-                />
-
-                {errors.username && (
-                  <p className='text-xs text-destructive text-sm'>
-                    {errors.username.message}
-                  </p>
-                )}
-              </div>
+              
               {/* Email*/}
               <div className='flex flex-col gap-3'>
                 <Label htmlFor='email' className='block text-sm'>
@@ -135,9 +141,26 @@ export function SignupForm({
                   </p>
                 )}
               </div>
+              {/* Confirm Password*/}
+              <div className='flex flex-col gap-3'>
+                <Label htmlFor='confirmPassword' className='block text-sm'>
+                   Xác nhận mật khẩu
+                </Label>
+                <Input
+                  id='confirmPassword'
+                  type='password'
+                  {...register("confirmPassword")}
+                />
 
-              <Button type='submit' className='w-full' disabled={isSubmitting}>
-                Tạo tài khoản
+                {errors.confirmPassword && (
+                  <p className='text-xs text-destructive text-sm'>
+                    {errors.confirmPassword.message}
+                  </p>
+                )}
+              </div>
+
+              <Button type='submit' className='w-full' disabled={isLoading}>
+                {isLoading ? "Đang xử lý..." : "Tạo tài khoản"}
               </Button>
 
               <div className='text-center'>

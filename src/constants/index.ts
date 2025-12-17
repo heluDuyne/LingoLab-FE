@@ -26,17 +26,17 @@ export const ROUTES = {
   },
 
   // Student routes
-  STUDENT: {
-    DASHBOARD: "/student",
-    COURSES: "/student/courses",
-    COURSE_DETAIL: "/student/courses/:id",
-    ASSIGNMENTS: "/student/assignments",
-    WRITING_SUBMISSION: "/student/submit/writing/:assignmentId",
-    SPEAKING_SUBMISSION: "/student/submit/speaking/:assignmentId",
-    PROGRESS: "/student/progress",
-    PROFILE: "/student/profile",
-    REPORT_DETAIL: "/student/report/:submissionId",
-    SETTINGS: "/student/settings",
+  LEARNER: {
+    DASHBOARD: "/learner",
+    COURSES: "/learner/courses",
+    COURSE_DETAIL: "/learner/courses/:id",
+    ASSIGNMENTS: "/learner/assignments",
+    WRITING_SUBMISSION: "/learner/submit/writing/:assignmentId",
+    SPEAKING_SUBMISSION: "/learner/submit/speaking/:assignmentId",
+    PROGRESS: "/learner/progress",
+    PROFILE: "/learner/profile",
+    REPORT_DETAIL: "/learner/report/:submissionId",
+    SETTINGS: "/learner/settings",
   },
 } as const;
 
@@ -50,7 +50,8 @@ export const STORAGE_KEYS = {
 // User roles
 export const USER_ROLES = {
   TEACHER: "teacher",
-  STUDENT: "student",
+  LEARNER: "learner",
+  ADMIN: "admin",
 } as const;
 
 // Test accounts for development
@@ -60,7 +61,7 @@ export const TEST_ACCOUNTS = {
     email: "teacher@test.com",
     password: "teacher123",
   },
-  STUDENT: {
+  LEARNER: {
     username: "student",
     email: "student@test.com",
     password: "student123",

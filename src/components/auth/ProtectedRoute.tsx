@@ -30,8 +30,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     // Redirect to appropriate dashboard based on user role
     const redirectPath =
-      user.role === "student"
-        ? ROUTES.STUDENT.DASHBOARD
+      user.role === "learner"
+        ? ROUTES.LEARNER.DASHBOARD
         : ROUTES.TEACHER.DASHBOARD;
     return <Navigate to={redirectPath} replace />;
   }

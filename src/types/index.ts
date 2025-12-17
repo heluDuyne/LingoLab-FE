@@ -1,5 +1,5 @@
 // User types
-export type UserRole = 'teacher' | 'student';
+export type UserRole = 'teacher' | 'learner' | 'admin';
 
 export interface User {
   id: string;
@@ -20,17 +20,17 @@ export interface AuthState {
 }
 
 export interface LoginCredentials {
-  username: string;
   email: string;
   password: string;
 }
 
 export interface RegisterCredentials {
-  username: string;
   email: string;
   password: string;
-  name: string;
-  role: UserRole;
+  confirmPassword: string;
+  firstName?: string;
+  lastName?: string;
+  role?: UserRole;
 }
 
 // API Response types

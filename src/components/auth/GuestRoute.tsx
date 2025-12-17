@@ -30,8 +30,8 @@ export function GuestRoute({ children }: GuestRouteProps) {
 
     // Default redirect based on role
     const defaultRedirect =
-      user.role === "student"
-        ? ROUTES.STUDENT.DASHBOARD
+      user.role === "learner"
+        ? ROUTES.LEARNER.DASHBOARD
         : ROUTES.TEACHER.DASHBOARD;
 
     return <Navigate to={from || defaultRedirect} replace />;

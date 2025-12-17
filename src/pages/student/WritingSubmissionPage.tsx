@@ -78,7 +78,7 @@ export function WritingSubmissionPage() {
   const isUnderMinimum = assignment.wordLimit && wordCount < assignment.wordLimit.min;
 
   const handleBack = () => {
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   const handleSaveDraft = () => {
@@ -102,7 +102,7 @@ export function WritingSubmissionPage() {
     setIsSubmitting(false);
     setShowConfirmDialog(false);
     // Navigate back to dashboard after successful submission
-    navigate(ROUTES.STUDENT.DASHBOARD);
+    navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
   const getDaysUntilDue = () => {
