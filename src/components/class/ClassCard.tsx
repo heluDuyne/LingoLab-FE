@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { Users, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -7,9 +7,10 @@ interface ClassCardProps {
   name: string;
   studentCount: number;
   onManage: (id: string) => void;
+  onEdit: (id: string) => void;
 }
 
-export function ClassCard({ id, name, studentCount, onManage }: ClassCardProps) {
+export function ClassCard({ id, name, studentCount, onManage, onEdit }: ClassCardProps) {
   return (
     <Card className="hover:shadow-md transition-shadow shadow-sm border-slate-200">
       <CardContent className="p-6">
@@ -24,13 +25,26 @@ export function ClassCard({ id, name, studentCount, onManage }: ClassCardProps) 
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          className="w-full border-slate-300 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-600"
-          onClick={() => onManage(id)}
-        >
-          Manage Class
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0 border-slate-300 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(id);
+            }}
+          >
+            <Edit2 size={18} />
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 border-slate-300 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-600"
+            onClick={() => onManage(id)}
+          >
+            Manage Class
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

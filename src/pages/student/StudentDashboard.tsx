@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { CheckCircle, MessageSquare, Lightbulb } from "lucide-react";
 import { useAuthStore } from "@/stores";
-import { TaskCard, FeedbackSidebar } from "@/components/student";
-import { mockAssignments, mockSubmissions } from "@/data";
+import { TaskCard } from "@/components/student";
+import { ROUTES } from "@/constants"; // Added import
 
 // Types
 type TaskFilter = "ALL" | "TODO" | "SUBMITTED";
@@ -12,59 +11,49 @@ export function StudentDashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("ALL");
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<
-    string | null
-  >(null);
+  const [assignments, setAssignments] = useState<any[]>([]); // Using any for transition or AssignmentList mapped
+  const [loading, setLoading] = useState(true);
 
-  // Find selected submission and assignment for sidebar
-  const selectedSubmission = mockSubmissions.find(
-    (s) => s.id === selectedSubmissionId
-  );
-  const selectedAssignment = selectedSubmission
-    ? mockAssignments.find((a) => a.id === selectedSubmission.assignmentId)
-    : null;
+  // Load assignments
+  useEffect(() => {
+    const loadAssignments = async () => {
+      try {
+        const { assignmentApi } = await import("@/services/api/assignments");
+        const response = await assignmentApi.getMyAssignments(50, 0);
+        setAssignments(response.data);
+      } catch (error) {
+        console.error("Failed to load assignments", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAssignments();
+  }, []);
 
   // Filter assignments based on selected tab
-  const filteredAssignments = mockAssignments.filter((assignment) => {
-    const sub = mockSubmissions.find(
-      (s) => s.assignmentId === assignment.id && s.studentId === user?.id
-    );
-    if (taskFilter === "TODO") return !sub || sub.status === "PENDING";
-    if (taskFilter === "SUBMITTED") return sub && sub.status !== "PENDING";
+  const filteredAssignments = assignments.filter((assignment) => {
+    if (taskFilter === "TODO") return !assignment.submissionStatus || assignment.submissionStatus === "PENDING";
+    if (taskFilter === "SUBMITTED") return assignment.submissionStatus && assignment.submissionStatus !== "PENDING";
     return true;
   });
 
-  // Get upcoming deadlines (tasks not yet submitted)
-  const upcomingDeadlines = [...mockAssignments]
-    .filter((a) => {
-      const sub = mockSubmissions.find(
-        (s) => s.assignmentId === a.id && s.studentId === user?.id
-      );
-      return !sub || sub.status === "PENDING";
-    })
-    .sort(
-      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-    )
+  // Get upcoming deadlines
+  const upcomingDeadlines = [...assignments]
+    .filter((a) => !a.submissionStatus || a.submissionStatus === "PENDING")
+    .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     .slice(0, 3);
 
   const handleTaskAction = (assignmentId: string) => {
-    const assignment = mockAssignments.find((a) => a.id === assignmentId);
-    const sub = mockSubmissions.find(
-      (s) => s.assignmentId === assignmentId && s.studentId === user?.id
-    );
-
-    if (sub && (sub.status === "SUBMITTED" || sub.status === "GRADED")) {
-      // Show feedback sidebar for submitted/graded tasks
-      setSelectedSubmissionId(sub.id);
-    } else if (assignment) {
-      // Navigate to submission page based on task type
-      if (assignment.type === "WRITING") {
-        navigate(`/student/submit/writing/${assignmentId}`);
-      } else if (assignment.type === "SPEAKING") {
-        navigate(`/student/submit/speaking/${assignmentId}`);
-      }
+    // Navigate to submission page/detail based on type
+    const assignment = assignments.find(a => a.id === assignmentId);
+    if (assignment?.type === "SPEAKING") {
+        navigate(ROUTES.LEARNER.SPEAKING_SUBMISSION.replace(":assignmentId", assignmentId));
+    } else {
+        navigate(ROUTES.LEARNER.WRITING_SUBMISSION.replace(":assignmentId", assignmentId));
     }
   };
+
+  if (loading) return <div className="p-8 text-center">Loading dashboard...</div>;
 
   return (
     <div className='relative'>
@@ -107,12 +96,8 @@ export function StudentDashboard() {
             {/* Tasks List */}
             <div className='space-y-4'>
               {filteredAssignments.map((assignment) => {
-                const sub = mockSubmissions.find(
-                  (s) =>
-                    s.assignmentId === assignment.id && s.studentId === user?.id
-                );
-                const isGraded = sub?.status === "GRADED";
-                const isSubmitted = sub?.status === "SUBMITTED";
+                const isGraded = assignment.submissionStatus === "GRADED";
+                const isSubmitted = assignment.submissionStatus === "SUBMITTED" || isGraded;
 
                 return (
                   <TaskCard
@@ -120,11 +105,11 @@ export function StudentDashboard() {
                     id={assignment.id}
                     title={assignment.title}
                     className={assignment.className}
-                    dueDate={assignment.dueDate}
-                    image={assignment.image}
+                    dueDate={assignment.deadline}
+                    image={undefined}
                     isGraded={isGraded}
                     isSubmitted={isSubmitted}
-                    score={sub?.aiFeedback?.score}
+                    score={assignment.score}
                     onAction={handleTaskAction}
                   />
                 );
@@ -148,7 +133,7 @@ export function StudentDashboard() {
             <div className='space-y-5'>
               {upcomingDeadlines.length > 0 ? (
                 upcomingDeadlines.map((assignment) => {
-                  const date = new Date(assignment.dueDate);
+                  const date = new Date(assignment.deadline);
                   const month = date
                     .toLocaleString("default", { month: "short" })
                     .toUpperCase();
@@ -156,6 +141,18 @@ export function StudentDashboard() {
                   const daysUntil = Math.ceil(
                     (date.getTime() - Date.now()) / (1000 * 3600 * 24)
                   );
+                  
+                  let deadlineText = `Due in ${daysUntil} days`;
+                  let deadlineColor = "text-slate-500";
+                  
+                  if (daysUntil < 0) {
+                    deadlineText = `Overdue by ${Math.abs(daysUntil)} days`;
+                    deadlineColor = "text-red-500 font-medium";
+                  } else if (daysUntil === 0) {
+                    deadlineText = "Due Today";
+                    deadlineColor = "text-amber-600 font-medium";
+                  }
+
                   return (
                     <div
                       key={assignment.id}
@@ -173,8 +170,8 @@ export function StudentDashboard() {
                         <p className='font-semibold text-slate-900 truncate'>
                           {assignment.title}
                         </p>
-                        <p className='text-xs text-slate-500'>
-                          Due in {daysUntil} days
+                        <p className={`text-xs ${deadlineColor}`}>
+                          {deadlineText}
                         </p>
                       </div>
                     </div>
@@ -186,7 +183,7 @@ export function StudentDashboard() {
             </div>
           </section>
 
-          {/* Course Progress */}
+          {/* Course Progress - Static for now */}
           <section>
             <h3 className='text-lg font-bold text-slate-900 mb-4'>
               Course Progress
@@ -204,80 +201,20 @@ export function StudentDashboard() {
                   />
                 </div>
               </div>
-              <div className='bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3'>
-                <div className='flex justify-between items-center'>
-                  <p className='font-semibold text-slate-900'>IELTS Speaking</p>
-                  <span className='text-xs font-bold text-slate-400'>40%</span>
-                </div>
-                <div className='w-full bg-slate-100 rounded-full h-2'>
-                  <div
-                    className='bg-blue-400 h-2 rounded-full'
-                    style={{ width: "40%" }}
-                  />
-                </div>
-              </div>
             </div>
           </section>
 
-          {/* Recent Activity */}
+          {/* Recent Activity - Static for now */}
           <section>
-            <h3 className='text-lg font-bold text-slate-900 mb-4'>
-              Recent Activity
-            </h3>
-            <div className='space-y-4'>
-              <div className='flex items-start gap-3'>
-                <div className='bg-green-100 p-2 rounded-full text-green-600 shrink-0'>
-                  <CheckCircle size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    Grade posted for{" "}
-                    <span className='font-bold'>Writing Task 1</span>.
-                  </p>
-                  <p className='text-xs text-slate-400 mt-1'>2 hours ago</p>
-                </div>
-              </div>
-              <div className='flex items-start gap-3'>
-                <div className='bg-blue-100 p-2 rounded-full text-blue-600 shrink-0'>
-                  <MessageSquare size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    New comment on{" "}
-                    <span className='font-bold'>Speaking Practice</span>.
-                  </p>
-                  <p className='text-xs text-slate-400 mt-1'>1 day ago</p>
-                </div>
-              </div>
-              <div className='flex items-start gap-3'>
-                <div className='bg-amber-100 p-2 rounded-full text-amber-600 shrink-0'>
-                  <Lightbulb size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    New tip:{" "}
-                    <span className='font-bold'>Vocabulary expansion</span>.
-                  </p>
-                  <p className='text-xs text-slate-400 mt-1'>2 days ago</p>
-                </div>
-              </div>
-            </div>
+             {/* Retaining static structure to maintain layout */}
+             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                 <p className="text-slate-500 text-sm">Recent activity will appear here.</p>
+             </div>
           </section>
         </div>
       </div>
-
-      {/* FEEDBACK SIDEBAR */}
-      <FeedbackSidebar
-        isOpen={!!(selectedSubmission && selectedAssignment)}
-        onClose={() => setSelectedSubmissionId(null)}
-        submissionId={selectedSubmission?.id}
-        assignmentTitle={selectedAssignment?.title || ""}
-        assignmentClassName={selectedAssignment?.className || ""}
-        submissionStatus={selectedSubmission?.status || "PENDING"}
-        submittedAt={selectedSubmission?.submittedAt}
-        mediaType={selectedSubmission?.mediaType}
-        aiFeedback={selectedSubmission?.aiFeedback}
-      />
+      
+      {/* Sidebar temporarily disabled as we lack submission ID in list */}
     </div>
   );
 }

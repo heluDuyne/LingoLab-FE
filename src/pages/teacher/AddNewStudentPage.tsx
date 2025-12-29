@@ -1,27 +1,66 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, UserPlus } from "lucide-react";
+import { ArrowLeft, Search, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ROUTES } from "@/constants";
 import { toast } from "sonner";
-import { mockClasses, mockStudents, type Student, type ClassGroup } from "@/data";
+import { classApi } from "@/services/api/classes";
+import { userApi } from "@/services/api/users";
+import { useAuthStore } from "@/stores";
+import type { ClassList, User } from "@/types";
 
 export function AddNewStudentPage() {
   const navigate = useNavigate();
-
-  // Form state
-  const [fullName, setFullName] = useState("");
+  const { user } = useAuthStore();
+  
+  // State
+  const [activeTab, setActiveTab] = useState("create");
+  const [classes, setClasses] = useState<ClassList[]>([]);
+  const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Create Form State
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
-  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
+  const [password, setPassword] = useState("Student@123"); // Default temporary password
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Validation errors
+  // Common State
+  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [errors, setErrors] = useState<{
-    fullName?: string;
+    firstName?: string;
+    lastName?: string;
     email?: string;
+    password?: string;
   }>({});
+
+  // Fetch classes on mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      if (user?.id) {
+        try {
+          setIsLoadingClasses(true);
+          const response = await classApi.getClassesByTeacher(user.id, 100); // Fetch enough classes
+          setClasses(response.data || []);
+        } catch (error) {
+          console.error("Failed to fetch classes", error);
+          toast.error("Failed to load your classes.");
+        } finally {
+          setIsLoadingClasses(false);
+        }
+      }
+    };
+    fetchClasses();
+  }, [user?.id]);
 
   const handleCourseToggle = (courseId: string) => {
     setSelectedCourses((prev) =>
@@ -31,49 +70,103 @@ export function AddNewStudentPage() {
     );
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: { fullName?: string; email?: string } = {};
-
-    if (!fullName.trim()) {
-      newErrors.fullName = "Full name is required";
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      setIsSearching(true);
+      const results = await userApi.searchUsers({ query: searchQuery });
+      // Filter out only learners if needed, backend search usually generic
+      setSearchResults(results);
+      // setSearchResults(results.filter(u => u.role === 'learner'));
+    } catch (error) {
+      console.error("Search failed", error);
+      toast.error("Failed to search users.");
+    } finally {
+      setIsSearching(false);
     }
+  };
 
+  const validateCreateForm = (): boolean => {
+    const newErrors: typeof errors = {};
+    if (!firstName.trim()) newErrors.firstName = "First name is required";
+    if (!lastName.trim()) newErrors.lastName = "Last name is required";
     if (!email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Please enter a valid email address";
-    } else if (mockStudents.some((s) => s.email.toLowerCase() === email.toLowerCase())) {
-      newErrors.email = "A student with this email already exists";
+      newErrors.email = "Invalid email format";
     }
+    if (password.length < 6) newErrors.password = "Password must be at least 6 chars";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const enrollStudentInClasses = async (studentId: string, courseIds: string[]) => {
+    let successCount = 0;
+    for (const courseId of courseIds) {
+      try {
+        await classApi.enrollLearner(courseId, studentId);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to enroll in course ${courseId}`, error);
+      }
+    }
+    return successCount;
+  };
 
-    if (!validateForm()) {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateCreateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      // 1. Create User
+      const newUser = await userApi.createUser({
+        email,
+        password,
+        confirmPassword: password,
+        firstName,
+        lastName,
+        role: "learner",
+      });
+
+      // 2. Enroll in selected classes
+      if (selectedCourses.length > 0 && newUser?.id) {
+         await enrollStudentInClasses(newUser.id, selectedCourses);
+      }
+
+      toast.success("Student created successfully!");
+      navigate(ROUTES.TEACHER.STUDENTS);
+    } catch (error: any) {
+      console.error("Creation failed", error);
+      const msg = error.response?.data?.message || "Failed to create student";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleExistingSubmit = async () => {
+    if (!selectedStudentId) {
+      toast.error("Please select a student first.");
+      return;
+    }
+    if (selectedCourses.length === 0) {
+      toast.error("Please select at least one course.");
       return;
     }
 
-    // Create new student
-    const newStudent: Student = {
-      id: `s${Date.now()}`,
-      name: fullName.trim(),
-      email: email.trim().toLowerCase(),
-      avatar: null,
-    };
-
-    // In a real app, you would send this to an API
-    console.log("New student created:", newStudent);
-    console.log("Enrolled in courses:", selectedCourses);
-
-    toast.success("Student added successfully!", {
-      description: `${fullName} has been enrolled in ${selectedCourses.length} course(s).`,
-    });
-
-    navigate(ROUTES.TEACHER.STUDENTS);
+    try {
+      setIsSubmitting(true);
+      const count = await enrollStudentInClasses(selectedStudentId, selectedCourses);
+      toast.success(`Enrolled student in ${count} class(es).`);
+      navigate(ROUTES.TEACHER.STUDENTS);
+    } catch (error) {
+      toast.error("Enrollment failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
@@ -82,7 +175,6 @@ export function AddNewStudentPage() {
 
   return (
     <div className='max-w-4xl mx-auto pb-12 animate-in fade-in duration-300'>
-      {/* Page Header */}
       <div className='flex flex-col gap-2 mb-8'>
         <button
           onClick={handleCancel}
@@ -92,159 +184,177 @@ export function AddNewStudentPage() {
           Back to Students
         </button>
         <h1 className='text-3xl font-bold text-slate-900 tracking-tight'>
-          Add New Student
+          Add / Enroll Student
         </h1>
         <p className='text-slate-500 text-base'>
-          Enter the student's details and enroll them in a course.
+          Create a new student account or enroll an existing one.
         </p>
       </div>
 
-      {/* Form Card */}
       <div className='bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8'>
-        <form onSubmit={handleSubmit} className='flex flex-col gap-8'>
-          {/* Student Information Section */}
-          <div className='flex flex-col gap-6'>
-            <h3 className='text-lg font-bold text-slate-900 border-b border-slate-200 pb-3'>
-              Student Information
-            </h3>
+        <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsTrigger value="create">Create New Account</TabsTrigger>
+            <TabsTrigger value="existing">Add Existing Student</TabsTrigger>
+          </TabsList>
 
-            <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-              {/* Full Name */}
-              <div className='flex flex-col gap-2'>
-                <Label
-                  htmlFor='fullName'
-                  className='text-slate-900 text-base font-medium'
-                >
-                  Full Name <span className='text-red-500'>*</span>
-                </Label>
-                <Input
-                  id='fullName'
-                  type='text'
-                  placeholder='e.g., Nguyen Van A'
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value);
-                    if (errors.fullName) {
-                      setErrors((prev) => ({ ...prev, fullName: undefined }));
-                    }
-                  }}
-                  className={`h-12 bg-slate-50 border-slate-300 focus:border-purple-600 focus:ring-purple-600/50 ${
-                    errors.fullName ? "border-red-500 focus:border-red-500 focus:ring-red-500/50" : ""
-                  }`}
-                />
-                {errors.fullName && (
-                  <p className='text-red-500 text-sm'>{errors.fullName}</p>
-                )}
+          <TabsContent value="create">
+            <form onSubmit={handleCreateSubmit} className='flex flex-col gap-8'>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='firstName'>First Name <span className='text-red-500'>*</span></Label>
+                  <Input 
+                    id='firstName' 
+                    value={firstName} 
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className={errors.firstName ? "border-red-500" : ""}
+                  />
+                  {errors.firstName && <p className='text-red-500 text-sm'>{errors.firstName}</p>}
+                </div>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='lastName'>Last Name <span className='text-red-500'>*</span></Label>
+                  <Input 
+                    id='lastName' 
+                    value={lastName} 
+                    onChange={(e) => setLastName(e.target.value)}
+                    className={errors.lastName ? "border-red-500" : ""}
+                  />
+                  {errors.lastName && <p className='text-red-500 text-sm'>{errors.lastName}</p>}
+                </div>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='email'>Email <span className='text-red-500'>*</span></Label>
+                  <Input 
+                    id='email' 
+                    type="email"
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={errors.email ? "border-red-500" : ""}
+                  />
+                  {errors.email && <p className='text-red-500 text-sm'>{errors.email}</p>}
+                </div>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='password'>Values.Password (Default: Student@123)</Label>
+                  <Input 
+                    id='password' 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
               </div>
 
-              {/* Email Address */}
-              <div className='flex flex-col gap-2'>
-                <Label
-                  htmlFor='email'
-                  className='text-slate-900 text-base font-medium'
-                >
-                  Email Address <span className='text-red-500'>*</span>
-                </Label>
-                <Input
-                  id='email'
-                  type='email'
-                  placeholder='e.g., nguyenvana@email.com'
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errors.email) {
-                      setErrors((prev) => ({ ...prev, email: undefined }));
-                    }
-                  }}
-                  className={`h-12 bg-slate-50 border-slate-300 focus:border-purple-600 focus:ring-purple-600/50 ${
-                    errors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500/50" : ""
-                  }`}
-                />
-                {errors.email && (
-                  <p className='text-red-500 text-sm'>{errors.email}</p>
-                )}
+               {/* Course Selection (Reused) */}
+              <div className='flex flex-col gap-4'>
+                 <h3 className='text-lg font-bold text-slate-900'>Enroll in Courses (Optional)</h3>
+                 {isLoadingClasses ? <p>Loading classes...</p> : (
+                   <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'>
+                     {classes.map((cls) => (
+                       <label
+                         key={cls.id}
+                         className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                           selectedCourses.includes(cls.id)
+                             ? "bg-purple-50 border-purple-600 ring-2 ring-purple-600/20"
+                             : "border-slate-300 hover:bg-slate-50"
+                         }`}
+                       >
+                         <input
+                           type='checkbox'
+                           checked={selectedCourses.includes(cls.id)}
+                           onChange={() => handleCourseToggle(cls.id)}
+                           className='w-4 h-4 text-purple-600 rounded'
+                         />
+                         <span className='text-slate-700 text-sm font-medium truncate'>{cls.name}</span>
+                       </label>
+                     ))}
+                   </div>
+                 )}
               </div>
 
-              {/* Contact Number */}
-              <div className='flex flex-col gap-2'>
-                <Label
-                  htmlFor='contactNumber'
-                  className='text-slate-900 text-base font-medium'
-                >
-                  Contact Number
-                </Label>
-                <Input
-                  id='contactNumber'
-                  type='tel'
-                  placeholder='e.g., +84 912 345 678'
-                  value={contactNumber}
-                  onChange={(e) => setContactNumber(e.target.value)}
-                  className='h-12 bg-slate-50 border-slate-300 focus:border-purple-600 focus:ring-purple-600/50'
-                />
+              <div className='flex justify-end gap-4'>
+                <Button type='button' variant='ghost' onClick={handleCancel}>Cancel</Button>
+                <Button type='submit' disabled={isSubmitting} className='bg-purple-600 hover:bg-purple-700 text-white'>
+                   {isSubmitting ? "Creating..." : "Create & Enroll"}
+                </Button>
               </div>
-            </div>
-          </div>
+            </form>
+          </TabsContent>
+          
+          <TabsContent value="existing">
+             <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-4">
+                   <Label>Search Student by Email or Name</Label>
+                   <div className="flex gap-2">
+                      <Input 
+                        placeholder="Search..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      <Button onClick={handleSearch} disabled={isSearching} variant="outline">
+                        {isSearching ? "Searching..." : <Search size={18} />}
+                      </Button>
+                   </div>
+                   
+                   {/* Search Results */}
+                   <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
 
-          {/* Course Enrollment Section */}
-          <div className='flex flex-col gap-6'>
-            <h3 className='text-lg font-bold text-slate-900 border-b border-slate-200 pb-3'>
-              Course Enrollment
-            </h3>
+                      {searchResults.length === 0 && !isSearching && searchQuery && (
+                         <p className="p-4 text-slate-500 text-sm text-center">No students found.</p>
+                      )}
+                      {searchResults.map(student => (
+                         <div 
+                           key={student.id} 
+                           className={`p-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 ${selectedStudentId === student.id ? 'bg-purple-50' : ''}`}
+                           onClick={() => setSelectedStudentId(student.id)}
+                         >
+                            <div>
+                               <p className="font-medium text-slate-900">{student.name || student.email}</p>
+                               <p className="text-sm text-slate-500">{student.email}</p>
+                            </div>
+                            {selectedStudentId === student.id && <CheckCircle className="text-purple-600" size={18} />}
+                         </div>
+                      ))}
+                   </div>
+                </div>
 
-            <div className='flex flex-col gap-4'>
-              <p className='text-slate-900 text-base font-medium'>
-                Enroll in Courses
-              </p>
-              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'>
-                {mockClasses.map((course) => (
-                  <label
-                    key={course.id}
-                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
-                      selectedCourses.includes(course.id)
-                        ? "bg-purple-50 border-purple-600 ring-2 ring-purple-600/20"
-                        : "border-slate-300 hover:bg-slate-50"
-                    }`}
+                {/* Course Selection (Reused) */}
+                <div className='flex flex-col gap-4'>
+                  <h3 className='text-lg font-bold text-slate-900'>Select Courses to Enroll</h3>
+                   {isLoadingClasses ? <p>Loading classes...</p> : (
+                     <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'>
+                       {classes.map((cls) => (
+                         <label
+                           key={cls.id}
+                           className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                             selectedCourses.includes(cls.id)
+                               ? "bg-purple-50 border-purple-600 ring-2 ring-purple-600/20"
+                               : "border-slate-300 hover:bg-slate-50"
+                           }`}
+                         >
+                           <input
+                             type='checkbox'
+                             checked={selectedCourses.includes(cls.id)}
+                             onChange={() => handleCourseToggle(cls.id)}
+                             className='w-4 h-4 text-purple-600 rounded'
+                           />
+                           <span className='text-slate-700 text-sm font-medium truncate'>{cls.name}</span>
+                         </label>
+                       ))}
+                     </div>
+                   )}
+                </div>
+
+                <div className='flex justify-end gap-4'>
+                  <Button type='button' variant='ghost' onClick={handleCancel}>Cancel</Button>
+                  <Button 
+                    onClick={handleExistingSubmit} 
+                    disabled={isSubmitting || !selectedStudentId} 
+                    className='bg-purple-600 hover:bg-purple-700 text-white'
                   >
-                    <input
-                      type='checkbox'
-                      checked={selectedCourses.includes(course.id)}
-                      onChange={() => handleCourseToggle(course.id)}
-                      className='w-4 h-4 text-purple-600 rounded focus:ring-purple-600'
-                    />
-                    <span className='text-slate-700 text-sm font-medium'>
-                      {course.name}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {selectedCourses.length > 0 && (
-                <p className='text-sm text-slate-500'>
-                  {selectedCourses.length} course(s) selected
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className='flex justify-end gap-4 pt-6 border-t border-slate-200'>
-            <Button
-              type='button'
-              variant='ghost'
-              onClick={handleCancel}
-              className='px-6 py-3 h-11 rounded-lg text-slate-700 font-semibold bg-slate-100 hover:bg-slate-200'
-            >
-              Cancel
-            </Button>
-            <Button
-              type='submit'
-              disabled={!fullName.trim() || !email.trim()}
-              className='px-6 py-3 h-11 rounded-lg text-white font-semibold bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-200 gap-2'
-            >
-              <UserPlus size={18} />
-              Add Student
-            </Button>
-          </div>
-        </form>
+                     {isSubmitting ? "Enrolling..." : "Enroll Selected Student"}
+                  </Button>
+                </div>
+             </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

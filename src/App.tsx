@@ -17,6 +17,7 @@ import {
   StudentDetailPage,
   AddNewStudentPage,
   ClassManagementPage,
+  TaskDetailPage,
   ReportPage,
   TeacherProfilePage,
 } from "@/pages/teacher";
@@ -66,6 +67,7 @@ function App() {
             <Route path="students/add" element={<AddNewStudentPage />} />
             <Route path="students/:studentId" element={<StudentDetailPage />} />
             <Route path="classes" element={<ClassManagementPage />} />
+            <Route path="classes/:classId/assignments/:assignmentId" element={<TaskDetailPage />} />
             <Route path="reports" element={<ReportPage />} />
             <Route path="profile" element={<TeacherProfilePage />} />
             {/* Add more teacher routes here:

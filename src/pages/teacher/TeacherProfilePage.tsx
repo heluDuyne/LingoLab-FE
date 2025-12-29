@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuthStore } from "@/stores";
 import { ROUTES } from "@/constants";
 import { toast } from "sonner";
+import { userApi } from "@/services/api/users";
+import { authApi } from "@/services/api/auth";
 import {
   User as UserIcon,
   Camera,
@@ -20,33 +22,72 @@ import {
 export function TeacherProfilePage() {
   const navigate = useNavigate();
   const { user, setUser } = useAuthStore();
+  const [loading, setLoading] = useState(false);
 
   // Personal Info
-  const [firstName, setFirstName] = useState(
-    user?.name?.split(" ")[0] || ""
-  );
-  const [lastName, setLastName] = useState(
-    user?.name?.split(" ").slice(1).join(" ") || ""
-  );
-  const [bio, setBio] = useState(
-    "Experienced IELTS instructor with over 5 years of teaching experience. Passionate about helping students achieve their target band scores."
-  );
-  const [phone, setPhone] = useState("+84 912 345 678");
-  const [location, setLocation] = useState("Ho Chi Minh City, Vietnam");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [location, setLocation] = useState("");
 
-  // Professional Info
+  // Professional Info (Not yet in API, keeping local state for UI demo until backend supports it fully if needed, or mapped to bio/other fields later)
   const [specialization, setSpecialization] = useState("IELTS Academic");
   const [yearsExperience, setYearsExperience] = useState("5");
   const [qualification, setQualification] = useState("CELTA Certified");
   const [languages, setLanguages] = useState("English, Vietnamese");
+  
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const currentUser = await authApi.getCurrentUser();
+        // Update store to ensure fresh data
+        setUser(currentUser);
+        
+        // Init form
+        setFirstName(currentUser.firstName || "");
+        setLastName(currentUser.lastName || "");
+        setBio(currentUser.bio || "");
+        setPhone(currentUser.phone || "");
+        setLocation(currentUser.location || "");
+        
+        // If name is present but first/last are missing in DB (legacy data), try to split name
+        if (!currentUser.firstName && !currentUser.lastName && currentUser.name) {
+             const parts = currentUser.name.split(" ");
+             setFirstName(parts[0]);
+             setLastName(parts.slice(1).join(" "));
+        }
 
-  const handleSave = () => {
-    if (user) {
-      setUser({
-        ...user,
-        name: `${firstName} ${lastName}`.trim(),
+      } catch (error) {
+        console.error("Failed to fetch profile", error);
+        toast.error("Failed to load profile data");
+      }
+    };
+    
+    fetchProfile();
+  }, [setUser]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const updatedUser = await userApi.updateUser(user.id, {
+        firstName,
+        lastName,
+        bio,
+        phone,
+        location,
+        // email: user.email // Email updates restricted usually
       });
+
+      setUser(updatedUser); // Update local store
       toast.success("Profile updated successfully!");
+    } catch (error) {
+      console.error("Failed to update profile", error);
+      toast.error("Failed to update profile. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -362,11 +403,21 @@ export function TeacherProfilePage() {
             Cancel
           </button>
           <button
-            className='px-6 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 shadow-sm transition-colors flex items-center gap-2 shadow-purple-200'
+            className='px-6 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 shadow-sm transition-colors flex items-center gap-2 shadow-purple-200 disabled:opacity-70 disabled:cursor-not-allowed'
             onClick={handleSave}
+            disabled={loading}
           >
-            <Save size={18} />
-            Save Changes
+            {loading ? (
+              <>
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={18} />
+                Save Changes
+              </>
+            )}
           </button>
         </div>
       </main>

@@ -6,6 +6,7 @@ export { AddNewStudentPage } from "./AddNewStudentPage";
 export { ClassManagementPage } from "./ClassManagementPage";
 export { ReportPage } from "./ReportPage";
 export { TeacherProfilePage } from "./TeacherProfilePage";
+export { default as TaskDetailPage } from "./TaskDetailPage";
 
 // Add more teacher page exports as you create them:
 // export { TeacherSettings } from './TeacherSettings';

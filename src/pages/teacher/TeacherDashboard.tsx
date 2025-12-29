@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   PlusCircle,
@@ -14,9 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores";
 import { ROUTES } from "@/constants";
+import { classApi } from "@/services/api/classes";
+import { userApi } from "@/services/api/users";
+import type { ClassList, User } from "@/types";
 import {
-  mockClasses,
-  mockStudents,
   mockPendingReviews,
   mockAssignments,
 } from "@/data";
@@ -24,22 +25,59 @@ import {
 export function TeacherDashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [classes] = useState(mockClasses);
-  const [students] = useState(mockStudents);
+  const [classes, setClasses] = useState<ClassList[]>([]);
+  const [isLoadingClasses, setIsLoadingClasses] = useState(true);
+  const [students, setStudents] = useState<User[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [pendingReviews] = useState(mockPendingReviews);
   const [assignments] = useState(mockAssignments);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user?.id) {
+        try {
+          setIsLoadingClasses(true);
+          const classRes = await classApi.getClassesByTeacher(user.id);
+          setClasses(classRes.data || []);
+        } catch (error) {
+          console.error("Failed to fetch classes:", error);
+        } finally {
+          setIsLoadingClasses(false);
+        }
+
+        try {
+            setIsLoadingStudents(true);
+            const studentRes = await userApi.getLearners();
+            // Take top 5 for preview
+            setStudents((studentRes.data || []).slice(0, 5)); 
+        } catch (error) {
+            console.error("Failed to fetch students:", error);
+        } finally {
+            setIsLoadingStudents(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [user?.id]);
 
   const handleStartCreate = () => {
     navigate(ROUTES.TEACHER.CREATE_TASK);
   };
 
   const handleSelectStudent = (studentId: string) => {
-    console.log("Select student:", studentId);
+    navigate(ROUTES.TEACHER.STUDENT_DETAIL.replace(":studentId", studentId));
   };
 
   const handleViewFullFeedback = (submissionId: string) => {
     console.log("View feedback:", submissionId);
   };
+  
+  const getStudentName = (student: User) => {
+      if (student.firstName && student.lastName) return `${student.firstName} ${student.lastName}`;
+      if (student.name) return student.name;
+      return student.email.split('@')[0];
+  }
 
   return (
     <div className='flex flex-col animate-in fade-in duration-300'>
@@ -74,29 +112,33 @@ export function TeacherDashboard() {
               className='flex overflow-x-auto pb-4 gap-4 scrollbar-none'
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
-              {classes.length > 0 ? (
+              {isLoadingClasses ? (
+                <p className='text-slate-400 italic'>Loading courses...</p>
+              ) : classes.length > 0 ? (
                 classes.map((cls) => (
                   <div
                     key={cls.id}
                     className='shrink-0 w-64 flex flex-col gap-3 rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer'
+                    onClick={() => navigate(ROUTES.TEACHER.CLASSES, { state: { classId: cls.id } })}
                   >
                     <div
-                      className='w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg'
-                      style={{ backgroundImage: `url('${cls.image}')` }}
-                    />
+                      className='w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg bg-slate-100 flex items-center justify-center'
+                    >
+                        <span className="text-3xl">📚</span>
+                    </div>
                     <div className='flex flex-col flex-1 justify-between gap-3'>
                       <div>
                         <p className='text-base font-medium leading-normal text-slate-900 truncate'>
                           {cls.name}
                         </p>
                         <p className='text-slate-500 text-sm font-normal'>
-                          {cls.studentIds.length} Students
+                          {cls.code || "No Code"}
                         </p>
                       </div>
                       <div className='w-full bg-slate-100 rounded-full h-1.5'>
                         <div
                           className='bg-purple-600 h-1.5 rounded-full'
-                          style={{ width: `${cls.progress}%` }}
+                          style={{ width: `0%` }} 
                         />
                       </div>
                     </div>
@@ -114,7 +156,10 @@ export function TeacherDashboard() {
               <h2 className='text-xl font-bold leading-tight tracking-tight text-slate-900'>
                 Student Management
               </h2>
-              <Button className='flex items-center justify-center gap-2 rounded-lg h-9 px-3 bg-purple-600 text-white text-sm font-bold leading-normal tracking-wide shadow-sm hover:bg-purple-700 transition-colors'>
+              <Button 
+                onClick={() => navigate(ROUTES.TEACHER.ADD_STUDENT)}
+                className='flex items-center justify-center gap-2 rounded-lg h-9 px-3 bg-purple-600 text-white text-sm font-bold leading-normal tracking-wide shadow-sm hover:bg-purple-700 transition-colors'
+              >
                 <UserPlus size={18} />
                 <span>Add Student</span>
               </Button>
@@ -134,7 +179,12 @@ export function TeacherDashboard() {
                     </tr>
                   </thead>
                   <tbody className='divide-y divide-slate-100'>
-                    {students.map((student) => (
+                    {isLoadingStudents ? (
+                         <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-400">Loading students...</td></tr>
+                    ) : students.length > 0 ? (
+                    students.map((student) => {
+                        const studentName = getStudentName(student);
+                        return (
                       <tr
                         key={student.id}
                         className='hover:bg-slate-50 transition-colors cursor-pointer'
@@ -150,16 +200,16 @@ export function TeacherDashboard() {
                                   : undefined,
                               }}
                             >
-                              {!student.avatar && student.name[0]}
+                              {!student.avatar && studentName[0]}
                             </div>
-                            <span>{student.name}</span>
+                            <span>{studentName}</span>
                           </div>
                         </td>
                         <td className='px-6 py-4 text-slate-500'>
                           {
-                            classes.filter((c) =>
-                              c.studentIds.includes(student.id)
-                            ).length
+                            // Placeholder: In real app, we need to fetch enrolled students for each class
+                            // or have student object include enrolledClassIds
+                            "N/A" 
                           }
                         </td>
                         <td className='px-6 py-4 text-right'>
@@ -188,8 +238,7 @@ export function TeacherDashboard() {
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {students.length === 0 && (
+                    )})) : (
                       <tr>
                         <td
                           colSpan={3}

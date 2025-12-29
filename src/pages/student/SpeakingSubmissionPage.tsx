@@ -11,14 +11,16 @@ import {
   Volume2,
   Play,
   Pause,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
 import { SpeakingSubmission } from "@/components/student/SpeakingSubmission";
 import { ROUTES } from "@/constants";
+import { assignmentApi } from "@/services/api/assignments";
 
 // Types
-interface Assignment {
+interface AssignmentUI {
   id: string;
   title: string;
   className: string;
@@ -29,31 +31,6 @@ interface Assignment {
   speakingTime?: number; // in seconds
   tips: string[];
 }
-
-// Mock data
-const mockAssignment: Assignment = {
-  id: "a2",
-  title: "IELTS Speaking Part 2 - Describe a Place",
-  className: "IELTS Speaking",
-  type: "SPEAKING",
-  dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-  description:
-    "In this task, you will be given a topic card and asked to speak about a particular subject for 1-2 minutes.",
-  prompt: `Describe a place you have visited that left a strong impression on you.
-
-You should say:
-• Where this place is
-• When you visited it
-• What you did there
-• And explain why it left a strong impression on you`,
-  speakingTime: 120,
-  tips: [
-    "Speak clearly and at a natural pace",
-    "Use a variety of vocabulary and expressions",
-    "Structure your response with an introduction, main points, and conclusion",
-    "Don't worry about minor mistakes - fluency is important",
-  ],
-};
 
 export function SpeakingSubmissionPage() {
   const navigate = useNavigate();
@@ -69,8 +46,39 @@ export function SpeakingSubmissionPage() {
   // Audio playback state
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const assignment = mockAssignment;
-  const maxRecordingTime = assignment.speakingTime || 120;
+  const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAssignment = async () => {
+      if (!assignmentId) return;
+      try {
+        const data = await assignmentApi.getAssignmentById(assignmentId);
+        setAssignment({
+            id: data.id,
+            title: data.title,
+            className: data.class?.name || "Class",
+            type: "SPEAKING",
+            dueDate: data.deadline.toString(),
+            description: data.description || "No description provided.",
+            prompt: data.prompt?.title || "No prompt content available.",
+            speakingTime: 120, // Default 2 minutes
+            tips: [
+                "Speak clearly and at a natural pace",
+                "Structure your response",
+                "Don't worry about minor mistakes - fluency is important",
+            ],
+        });
+      } catch (err) {
+        console.error("Failed to load assignment", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAssignment();
+  }, [assignmentId]);
+
+  const maxRecordingTime = assignment?.speakingTime || 120;
 
   // Recording timer effect
   useEffect(() => {
@@ -88,6 +96,25 @@ export function SpeakingSubmissionPage() {
     }
     return () => clearInterval(interval);
   }, [isRecording, maxRecordingTime]);
+
+  if (loading) {
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        </div>
+    );
+  }
+
+  if (!assignment) {
+      return (
+          <div className="flex h-screen items-center justify-center flex-col gap-4">
+              <p>Assignment not found.</p>
+              <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
+                  Back to Dashboard
+              </Button>
+          </div>
+      );
+  }
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);

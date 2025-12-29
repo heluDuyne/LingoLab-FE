@@ -20,6 +20,8 @@ export const ROUTES = {
     STUDENT_DETAIL: "/teacher/students/:studentId",
     ADD_STUDENT: "/teacher/students/add",
     CLASSES: "/teacher/classes",
+    CLASS_DETAIL: "/teacher/classes/:id", // Added for clarity, though currently managed by state
+    TASK_DETAIL: "/teacher/classes/:classId/assignments/:assignmentId",
     REPORTS: "/teacher/reports",
     PROFILE: "/teacher/profile",
     SETTINGS: "/teacher/settings",

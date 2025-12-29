@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuthStore } from "@/stores";
 import { ROUTES } from "@/constants";
@@ -10,11 +10,26 @@ import {
   Flag,
   Save,
   KeyRound,
+  Loader2,
 } from "lucide-react";
+import { learnerProfileApi, type LearnerProfile } from "@/services/api/learner-profiles";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 export function ProfilePage() {
   const navigate = useNavigate();
   const { user, setUser } = useAuthStore();
+  
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSuccessOpen, setIsSuccessOpen] = useState(false);
 
   const [firstName, setFirstName] = useState(
     user?.name?.split(" ")[0] || ""
@@ -23,15 +38,61 @@ export function ProfilePage() {
     user?.name?.split(" ").slice(1).join(" ") || ""
   );
   const [bio, setBio] = useState("");
-  const [phone, setPhone] = useState("+84 912 345 678");
-  const [targetBand, setTargetBand] = useState("7.5");
+  const [phone, setPhone] = useState(""); // Removed default hardcoded phone
+  const [targetBand, setTargetBand] = useState("6.0");
 
-  const handleSave = () => {
-    if (user) {
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user?.id) {
+        setIsLoading(true);
+        try {
+          const profile = await learnerProfileApi.getProfileByUserId(user.id);
+          if (profile) {
+            setProfileId(profile.id);
+            setFirstName(profile.firstName || user.name.split(" ")[0] || "");
+            setLastName(profile.lastName || user.name.split(" ").slice(1).join(" ") || "");
+            setTargetBand(profile.targetBand?.toString() || "6.0");
+            setBio(profile.learningGoals || "");
+            // Note: Phone and Bio aren't direct matches in LearnerProfile vs User currently, 
+            // mapping Bio to LearningGoals for now.
+          }
+        } catch (error) {
+          console.error("Failed to fetch profile:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [user?.id]);
+
+  const handleSave = async () => {
+    if (!profileId || !user) return;
+
+    setIsSaving(true);
+    try {
+      // 1. Update Backend Learner Profile (which verifies user update too)
+      await learnerProfileApi.updateProfile(profileId, {
+        firstName,
+        lastName,
+        targetBand: parseFloat(targetBand),
+        learningGoals: bio,
+      });
+
+      // 2. Update Local User Store
       setUser({
         ...user,
         name: `${firstName} ${lastName}`.trim(),
       });
+
+      setIsSuccessOpen(true);
+
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+      alert("Failed to update profile. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -39,8 +100,34 @@ export function ProfilePage() {
     navigate(ROUTES.LEARNER.DASHBOARD);
   };
 
+  if (isLoading) {
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-5xl mx-auto pb-12 animate-in fade-in duration-300">
+      <Dialog open={isSuccessOpen} onOpenChange={setIsSuccessOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Success</DialogTitle>
+            <DialogDescription>
+              Profile updated successfully!
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors"
+              onClick={() => setIsSuccessOpen(false)}
+            >
+              OK
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Main Content */}
       <main className="flex flex-col gap-6">
         {/* Header */}
@@ -69,7 +156,7 @@ export function ProfilePage() {
                 >
                   {!user?.avatar && (
                     <span className="text-2xl font-bold text-slate-400">
-                      {user?.name?.[0] || "U"}
+                      {firstName?.[0] || user?.name?.[0] || "U"}
                     </span>
                   )}
                 </div>
@@ -255,14 +342,20 @@ export function ProfilePage() {
           <button
             className="px-6 py-2.5 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
             onClick={handleCancel}
+            disabled={isSaving}
           >
             Cancel
           </button>
           <button
             className="px-6 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 shadow-sm transition-colors flex items-center gap-2 shadow-purple-200"
             onClick={handleSave}
+            disabled={isSaving}
           >
-            <Save size={18} />
+            {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+                <Save size={18} />
+            )}
             Save Changes
           </button>
         </div>

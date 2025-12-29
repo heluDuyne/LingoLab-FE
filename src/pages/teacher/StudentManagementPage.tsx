@@ -1,14 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   Search,
   Plus,
-  ChevronDown,
   Eye,
-  Edit3,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
   Lock,
   Unlock,
   AlertTriangle,
@@ -16,13 +11,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants";
-import { mockStudents, mockClasses, type Student } from "@/data";
+import { userApi } from "@/services/api/users";
+import type { User } from "@/types";
 import { toast } from "sonner";
 
 export function StudentManagementPage() {
   const navigate = useNavigate();
-  const [students] = useState(mockStudents);
-  const [classes] = useState(mockClasses);
+  const [students, setStudents] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Lock status state. test thôi
@@ -30,49 +26,69 @@ export function StudentManagementPage() {
 
   // Modal state
   const [showLockModal, setShowLockModal] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [lockAction, setLockAction] = useState<"lock" | "unlock">("lock");
+
+  // Fetch students on mount
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      setIsLoading(true);
+      // Fetch all learners. In future, might want to filter by teacher's classes.
+      const response = await userApi.getLearners();
+      setStudents(response.data || []);
+    } catch (error) {
+      console.error("Failed to fetch students", error);
+      toast.error("Failed to load students");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter students based on search
   const filteredStudents = students.filter(
-    (student) =>
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (student) => {
+        const name = student.firstName ? `${student.firstName} ${student.lastName}` : (student.name || student.email.split('@')[0]);
+        return name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase())
+    }
   );
 
   // Helper functions
+  const getStudentName = (student: User) => {
+      if (student.firstName && student.lastName) return `${student.firstName} ${student.lastName}`;
+      if (student.name) return student.name;
+      return student.email.split('@')[0];
+  }
+
   const getStudentCourse = (studentId: string) => {
-    const c = classes.find((cls) => cls.studentIds.includes(studentId));
-    return c ? c.name : "Unassigned";
+      // Avoid unused variable warning
+      if (!studentId) return "";
+      // Real implementation would check enrollments. 
+      // For now, return placeholder or fetch details if we want N+1 (bad idea).
+      // Or we can update backend to include enrollment counts in list.
+      return "View Details"; 
   };
 
-  const getProgressColor = (pct: number) => {
-    if (pct >= 90) return "bg-emerald-400";
-    if (pct >= 60) return "bg-teal-400";
-    if (pct >= 30) return "bg-amber-400";
-    return "bg-slate-400";
-  };
-
-  // Deterministic mock data for demo purposes based on ID
+  // Deterministic mock data for demo purposes based on ID until backend supports it
   const getMockData = (id: string) => {
     const num = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const progress = num % 100;
-    const times = [
-      "2 days ago",
-      "5 hours ago",
-      "1 week ago",
-      "Just now",
-      "1 month ago",
-    ];
-    const lastActive = times[num % times.length];
-    return { progress, lastActive };
+    // Format createdAt as last active for now or use random relative time
+    return { progress, lastActive: "N/A" };
   };
 
   const handleSelectStudent = (studentId: string) => {
-    navigate(`/teacher/students/${studentId}`);
+    // Navigate to student profile/detail. Route needs to be defined.
+    // For now we don't have a dedicated student detail page for teachers yet in this refactor?
+    // Checking routes... ROUTES.TEACHER.STUDENT_DETAIL exists.
+    navigate(ROUTES.TEACHER.STUDENT_DETAIL.replace(":studentId", studentId));
   };
 
-  const handleLockClick = (student: Student, e: React.MouseEvent) => {
+  const handleLockClick = (student: User, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedStudent(student);
     setLockAction(lockedStudents.has(student.id) ? "unlock" : "lock");
@@ -85,7 +101,7 @@ export function StudentManagementPage() {
     if (lockAction === "lock") {
       setLockedStudents((prev) => new Set([...prev, selectedStudent.id]));
       toast.success(`Account locked`, {
-        description: `${selectedStudent.name}'s account has been locked.`,
+        description: `${getStudentName(selectedStudent)}'s account has been locked.`,
       });
     } else {
       setLockedStudents((prev) => {
@@ -94,7 +110,7 @@ export function StudentManagementPage() {
         return newSet;
       });
       toast.success(`Account unlocked`, {
-        description: `${selectedStudent.name}'s account has been unlocked.`,
+        description: `${getStudentName(selectedStudent)}'s account has been unlocked.`,
       });
     }
 
@@ -116,7 +132,7 @@ export function StudentManagementPage() {
             Student Management
           </p>
           <p className='text-base font-normal text-slate-500'>
-            Oversee and manage all your students in one place.
+            Oversee and manage all your learners.
           </p>
         </div>
         <Button
@@ -144,14 +160,7 @@ export function StudentManagementPage() {
           </div>
         </div>
         <div className='flex gap-3'>
-          <button className='flex h-14 items-center justify-center gap-x-2 rounded-lg bg-white border border-slate-200 pl-6 pr-5 text-slate-700 hover:bg-slate-50 transition-colors shadow-sm'>
-            <p className='text-sm font-medium'>Course: All</p>
-            <ChevronDown size={20} className='text-slate-400' />
-          </button>
-          <button className='flex h-14 items-center justify-center gap-x-2 rounded-lg bg-white border border-slate-200 pl-6 pr-5 text-slate-700 hover:bg-slate-50 transition-colors shadow-sm'>
-            <p className='text-sm font-medium'>Status: All</p>
-            <ChevronDown size={20} className='text-slate-400' />
-          </button>
+            {/* Filters placeholder */}
         </div>
       </div>
 
@@ -185,8 +194,20 @@ export function StudentManagementPage() {
               </tr>
             </thead>
             <tbody className='divide-y divide-slate-100'>
-              {filteredStudents.map((student) => {
-                const { progress, lastActive } = getMockData(student.id);
+              {isLoading ? (
+                  <tr><td colSpan={6} className="text-center py-8">Loading students...</td></tr>
+              ) : filteredStudents.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className='text-center py-8 text-slate-400 italic'
+                  >
+                    No students found.
+                  </td>
+                </tr>
+              ) : (filteredStudents.map((student) => {
+                const { lastActive } = getMockData(student.id);
+                const studentName = getStudentName(student);
                 return (
                   <tr
                     key={student.id}
@@ -210,7 +231,7 @@ export function StudentManagementPage() {
                                   : "border-slate-200"
                               }`}
                               src={student.avatar}
-                              alt={student.name}
+                              alt={studentName}
                             />
                           ) : (
                             <div
@@ -220,7 +241,7 @@ export function StudentManagementPage() {
                                   : "bg-purple-100 text-purple-600 border-purple-200"
                               }`}
                             >
-                              {student.name[0]}
+                              {studentName[0]}
                             </div>
                           )}
                           {lockedStudents.has(student.id) && (
@@ -238,7 +259,7 @@ export function StudentManagementPage() {
                                   : ""
                               }`}
                             >
-                              {student.name}
+                              {studentName}
                             </span>
                             {lockedStudents.has(student.id) && (
                               <span className='inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700'>
@@ -256,23 +277,13 @@ export function StudentManagementPage() {
                       {getStudentCourse(student.id)}
                     </td>
                     <td className='px-6 py-4'>
-                      <div className='flex items-center gap-3'>
-                        <div className='w-24 bg-slate-100 rounded-full h-2 overflow-hidden'>
-                          <div
-                            className={`h-full rounded-full ${getProgressColor(
-                              progress
-                            )}`}
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                        <span className='font-medium text-slate-700 text-xs'>
-                          {progress}%
-                        </span>
-                      </div>
+                       <span className='font-medium text-slate-400 text-xs'>
+                          N/A
+                       </span>
                     </td>
                     <td className='px-6 py-4 text-slate-600'>{lastActive}</td>
                     <td className='px-6 py-4 text-right'>
-                      <div className='flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
+                      <div className='flex justify-end items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity'>
                         <button
                           className='p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-purple-600 transition-colors'
                           onClick={(e) => {
@@ -282,13 +293,6 @@ export function StudentManagementPage() {
                           title='View details'
                         >
                           <Eye size={18} />
-                        </button>
-                        <button
-                          className='p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-purple-600 transition-colors'
-                          onClick={(e) => e.stopPropagation()}
-                          title='Edit student'
-                        >
-                          <Edit3 size={18} />
                         </button>
                         <button
                           className={`p-2 rounded-md transition-colors ${
@@ -309,56 +313,21 @@ export function StudentManagementPage() {
                             <Unlock size={18} />
                           )}
                         </button>
-                        <button
-                          className='p-2 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors'
-                          onClick={(e) => e.stopPropagation()}
-                          title='Delete student'
-                        >
-                          <Trash2 size={18} />
-                        </button>
                       </div>
                     </td>
                   </tr>
                 );
-              })}
-              {filteredStudents.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className='text-center py-8 text-slate-400 italic'
-                  >
-                    No students found.
-                  </td>
-                </tr>
-              )}
+              }))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination Placeholder */}
       <div className='flex flex-col sm:flex-row justify-between items-center gap-4 py-2'>
         <span className='text-sm text-slate-500'>
-          Showing{" "}
-          <span className='font-semibold text-slate-900'>
-            1-{filteredStudents.length}
-          </span>{" "}
-          of{" "}
-          <span className='font-semibold text-slate-900'>
-            {filteredStudents.length}
-          </span>
+          Showing <span className='font-semibold text-slate-900'>{filteredStudents.length}</span> students
         </span>
-        <div className='flex items-center gap-2'>
-          <button className='flex items-center justify-center h-9 w-9 rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed'>
-            <ChevronLeft size={20} />
-          </button>
-          <span className='text-sm font-medium text-slate-700'>
-            Page 1 of 1
-          </span>
-          <button className='flex items-center justify-center h-9 w-9 rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed'>
-            <ChevronRight size={20} />
-          </button>
-        </div>
       </div>
 
       {/* Lock/Unlock Confirmation Modal */}
@@ -410,7 +379,7 @@ export function StudentManagementPage() {
                   <>
                     Are you sure you want to lock{" "}
                     <span className='font-semibold text-slate-700'>
-                      {selectedStudent.name}
+                      {getStudentName(selectedStudent)}
                     </span>
                     's account? They will not be able to access the platform
                     until unlocked.
@@ -419,7 +388,7 @@ export function StudentManagementPage() {
                   <>
                     Are you sure you want to unlock{" "}
                     <span className='font-semibold text-slate-700'>
-                      {selectedStudent.name}
+                      {getStudentName(selectedStudent)}
                     </span>
                     's account? They will regain full access to the platform.
                   </>

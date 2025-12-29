@@ -70,11 +70,15 @@ export const authApi = {
     }
 
     // Real API call
-    const { data } = await apiClient.post<AuthResponse>(
+    // Real API call
+    const { data } = await apiClient.post<any>(
       "/auth/login",
       credentials
     );
-    return data;
+    return {
+      user: data.user,
+      token: data.accessToken,
+    };
   },
 
   register: async (credentials: RegisterCredentials): Promise<AuthResponse> => {
@@ -99,11 +103,15 @@ export const authApi = {
     }
 
     // Real API call
-    const { data } = await apiClient.post<AuthResponse>(
+    // Real API call
+    const { data } = await apiClient.post<any>(
       "/auth/register",
       credentials
     );
-    return data;
+    return {
+      user: data.user,
+      token: data.accessToken,
+    };
   },
 
   logout: async (): Promise<void> => {
@@ -120,8 +128,8 @@ export const authApi = {
   },
 
   refreshToken: async (): Promise<{ token: string }> => {
-    const { data } = await apiClient.post<{ token: string }>("/auth/refresh");
-    return data;
+    const { data } = await apiClient.post<any>("/auth/refresh");
+    return { token: data.accessToken };
   },
 
   forgotPassword: async (email: string): Promise<void> => {

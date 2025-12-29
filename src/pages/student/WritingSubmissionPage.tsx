@@ -9,14 +9,16 @@ import {
   AlertCircle,
   CheckCircle,
   Info,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
 import { WritingSubmission } from "@/components/student/WritingSubmission";
 import { ROUTES } from "@/constants";
+import { assignmentApi } from "@/services/api/assignments";
 
 // Types
-interface Assignment {
+interface AssignmentUI {
   id: string;
   title: string;
   className: string;
@@ -28,25 +30,6 @@ interface Assignment {
   timeLimit?: number; // in minutes
 }
 
-// Mock data
-const mockAssignment: Assignment = {
-  id: "a1",
-  title: "IELTS Writing Task 2 - Environment Essay",
-  className: "IELTS Writing",
-  type: "WRITING",
-  dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-  description:
-    "Write an essay discussing the causes of climate change and propose solutions to address this global issue. You should write at least 250 words.",
-  instructions: [
-    "Read the prompt carefully before you begin writing",
-    "Plan your essay structure with an introduction, body paragraphs, and conclusion",
-    "Use a variety of vocabulary and complex sentence structures",
-    "Support your arguments with relevant examples",
-    "Review your work for grammar and spelling errors before submitting",
-  ],
-  wordLimit: { min: 250, max: 300 },
-};
-
 export function WritingSubmissionPage() {
   const navigate = useNavigate();
   const { assignmentId } = useParams();
@@ -54,9 +37,41 @@ export function WritingSubmissionPage() {
   const [autoSaved, setAutoSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  
+  const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // In a real app, fetch assignment by ID
-  const assignment = mockAssignment;
+  useEffect(() => {
+    const fetchAssignment = async () => {
+      if (!assignmentId) return;
+      try {
+        const data = await assignmentApi.getAssignmentById(assignmentId);
+        
+        // Transform API data to UI model
+        setAssignment({
+            id: data.id,
+            title: data.title,
+            className: data.class?.name || "Class",
+            type: "WRITING",
+            dueDate: data.deadline.toString(),
+            description: data.prompt?.title || data.description || "No description provided.",
+            // Mock instructions/limits for now as they aren't in API yet
+            instructions: [
+                "Read the prompt carefully before you begin writing",
+                "Plan your essay structure",
+                "Review your work before submitting",
+            ],
+            wordLimit: { min: 150, max: 400 },
+        });
+      } catch (err) {
+        console.error("Failed to load assignment", err);
+        // handle error (navigate back or show error)
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAssignment();
+  }, [assignmentId]);
 
   // Auto-save effect
   useEffect(() => {
@@ -69,6 +84,25 @@ export function WritingSubmissionPage() {
       return () => clearTimeout(timer);
     }
   }, [text]);
+
+  if (loading) {
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        </div>
+    );
+  }
+
+  if (!assignment) {
+      return (
+          <div className="flex h-screen items-center justify-center flex-col gap-4">
+              <p>Assignment not found.</p>
+              <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
+                  Back to Dashboard
+              </Button>
+          </div>
+      );
+  }
 
   const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
   const isWordCountValid =
