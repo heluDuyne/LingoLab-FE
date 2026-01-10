@@ -28,9 +28,8 @@ export function TaskCard({
     "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&auto=format&fit=crop&q=60";
 
   const getButtonLabel = () => {
-    if (isGraded) return "View Feedback";
-    if (isSubmitted) return "View Submission";
-    return "Submit Work";
+    if (isGraded || isSubmitted) return "Review";
+    return "Start Task";
   };
 
   const getButtonStyle = () => {

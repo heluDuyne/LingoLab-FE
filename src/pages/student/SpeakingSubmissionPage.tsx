@@ -18,6 +18,8 @@ import { BadgeStatus } from "@/components/ui/badge-status";
 import { SpeakingSubmission } from "@/components/student/SpeakingSubmission";
 import { ROUTES } from "@/constants";
 import { assignmentApi } from "@/services/api/assignments";
+import { attemptApi } from "@/services/api/attempts";
+import { useAuthStore } from "@/stores";
 
 // Types
 interface AssignmentUI {
@@ -30,11 +32,14 @@ interface AssignmentUI {
   prompt: string;
   speakingTime?: number; // in seconds
   tips: string[];
+  promptId?: string;
 }
 
 export function SpeakingSubmissionPage() {
   const navigate = useNavigate();
   const { assignmentId } = useParams();
+  const { user } = useAuthStore();
+  const [attemptId, setAttemptId] = useState<string | null>(null);
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -42,6 +47,8 @@ export function SpeakingSubmissionPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [existingAudioUrl, setExistingAudioUrl] = useState<string | null>(null);
+  const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
 
   // Audio playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -49,44 +56,61 @@ export function SpeakingSubmissionPage() {
   const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ... (previous code)
+
   useEffect(() => {
     const fetchAssignment = async () => {
-      if (!assignmentId) return;
+      if (!assignmentId || !user?.id) return;
       try {
-        const data = await assignmentApi.getAssignmentById(assignmentId);
-        setAssignment({
-            id: data.id,
-            title: data.title,
-            className: data.class?.name || "Class",
-            type: "SPEAKING",
-            dueDate: data.deadline.toString(),
-            description: data.description || "No description provided.",
-            prompt: data.prompt?.title || "No prompt content available.",
-            speakingTime: 120, // Default 2 minutes
-            tips: [
-                "Speak clearly and at a natural pace",
-                "Structure your response",
-                "Don't worry about minor mistakes - fluency is important",
-            ],
-        });
+        const data = await assignmentApi.getAssignmentById(assignmentId) as any;
+        // ... (data mapping)
+        
+        // Handle attempt creation/retrieval
+        if (data.attemptId) {
+            setAttemptId(data.attemptId);
+            setSubmissionStatus(data.submissionStatus || null);
+
+            // Fetch full attempt details to get the content/media
+            try {
+                const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+                if (attemptDetails.media && attemptDetails.media.length > 0) {
+                    setExistingAudioUrl(attemptDetails.media[0].storageUrl);
+                } else if (attemptDetails.content) {
+                    // Fallback if content was used for URL storage
+                    setExistingAudioUrl(attemptDetails.content);
+                }
+            } catch (err) {
+                console.error("Failed to fetch attempt details", err);
+            }
+
+        } else if (data.prompt?.id) {
+             const newAttempt = await attemptApi.createAttempt({
+                learnerId: user.id,
+                promptId: data.prompt.id,
+                skillType: "speaking",
+                assignmentId: data.id
+            });
+            setAttemptId(newAttempt.id);
+        }
+
       } catch (err) {
         console.error("Failed to load assignment", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchAssignment();
-  }, [assignmentId]);
-
-  const maxRecordingTime = assignment?.speakingTime || 120;
+    if (user?.id) {
+        fetchAssignment();
+    }
+  }, [assignmentId, user?.id]);
 
   // Recording timer effect
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (isRecording) {
       interval = setInterval(() => {
         setRecordingTime((prev) => {
-          if (prev >= maxRecordingTime) {
+          if (prev >= (assignment?.speakingTime || 120)) {
             setIsRecording(false);
             return prev;
           }
@@ -95,26 +119,14 @@ export function SpeakingSubmissionPage() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isRecording, maxRecordingTime]);
+  }, [isRecording, assignment?.speakingTime]);
 
-  if (loading) {
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-        </div>
-    );
-  }
+  const maxRecordingTime = assignment?.speakingTime || 120;
+  const isReadOnly = submissionStatus === 'SUBMITTED' || submissionStatus === 'SCORED';
 
-  if (!assignment) {
-      return (
-          <div className="flex h-screen items-center justify-center flex-col gap-4">
-              <p>Assignment not found.</p>
-              <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
-                  Back to Dashboard
-              </Button>
-          </div>
-      );
-  }
+  // ...
+
+  const hasRecording = recordingTime > 0 || audioFile !== null || existingAudioUrl !== null;
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -145,7 +157,7 @@ export function SpeakingSubmissionPage() {
   };
 
   const handleSubmit = async () => {
-    if (recordingTime === 0 && !audioFile) {
+    if (recordingTime === 0 && !audioFile && !existingAudioUrl) {
       setShowConfirmDialog(true);
       return;
     }
@@ -153,20 +165,56 @@ export function SpeakingSubmissionPage() {
   };
 
   const submitWork = async () => {
+    if (!attemptId) {
+        console.error("Attempt ID is missing");
+        alert("Session error: Attempt ID not found. Please refresh the page.");
+        return;
+    }
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    setShowConfirmDialog(false);
-    navigate(ROUTES.LEARNER.DASHBOARD);
+    try {
+        // TODO: Upload audio file and get URL
+        // const audioUrl = await uploadAudio(audioFile);
+        const mockAudioUrl = "mock-audio-file.mp3"; 
+
+        await attemptApi.submitAttempt(attemptId, {
+            content: mockAudioUrl,
+            status: "SUBMITTED"
+        });
+        navigate(ROUTES.LEARNER.DASHBOARD);
+    } catch (error) {
+        console.error("Submission failed", error);
+        alert("Failed to submit. Please try again.");
+    } finally {
+        setIsSubmitting(false);
+        setShowConfirmDialog(false);
+    }
   };
 
   const getDaysUntilDue = () => {
+    if (!assignment) return 0;
     const dueDate = new Date(assignment.dueDate);
     const now = new Date();
     return Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
   };
 
-  const hasRecording = recordingTime > 0 || audioFile !== null;
+  if (loading) {
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        </div>
+    );
+  }
+
+  if (!assignment) {
+      return (
+          <div className="flex h-screen items-center justify-center flex-col gap-4">
+              <p>Assignment not found.</p>
+              <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
+                  Back to Dashboard
+              </Button>
+          </div>
+      );
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-12 animate-in fade-in duration-300">
@@ -213,9 +261,9 @@ export function SpeakingSubmissionPage() {
             <Button
               className="gap-2 bg-purple-600 hover:bg-purple-700"
               onClick={handleSubmit}
-              disabled={isSubmitting || !hasRecording}
+              disabled={isSubmitting || isReadOnly}
             >
-              {isSubmitting ? (
+              {isReadOnly ? "Submitted" : isSubmitting ? (
                 <>
                   <span className="animate-spin">⏳</span>
                   Submitting...
@@ -235,17 +283,7 @@ export function SpeakingSubmissionPage() {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Topic Card */}
-          <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center gap-2 mb-4">
-              <Volume2 size={20} />
-              <h3 className="font-bold">Topic Card</h3>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-              <p className="whitespace-pre-line leading-relaxed">
-                {assignment.prompt}
-              </p>
-            </div>
-          </div>
+          {/* ... */}
 
           {/* Recording Area */}
           <SpeakingSubmission
@@ -254,7 +292,8 @@ export function SpeakingSubmissionPage() {
             recordingTime={recordingTime}
             audioFile={audioFile}
             setAudioFile={setAudioFile}
-            readOnly={false}
+            readOnly={isReadOnly}
+            existingAudioUrl={existingAudioUrl}
             formatTime={formatTime}
           />
 
@@ -368,5 +407,5 @@ export function SpeakingSubmissionPage() {
   );
 }
 
-export default SpeakingSubmissionPage;
+
 

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -16,11 +17,10 @@ import { useAuthStore } from "@/stores";
 import { ROUTES } from "@/constants";
 import { classApi } from "@/services/api/classes";
 import { userApi } from "@/services/api/users";
+import { assignmentApi } from "@/services/api/assignments";
+import { attemptApi } from "@/services/api/attempts"; // 1. Import attemptApi
 import type { ClassList, User } from "@/types";
-import {
-  mockPendingReviews,
-  mockAssignments,
-} from "@/data";
+// Removed mockPendingReviews and mockAssignments as they will be fetched from API or are for local use only.
 
 export function TeacherDashboard() {
   const navigate = useNavigate();
@@ -29,8 +29,9 @@ export function TeacherDashboard() {
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [students, setStudents] = useState<User[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
-  const [pendingReviews] = useState(mockPendingReviews);
-  const [assignments] = useState(mockAssignments);
+  const [pendingReviews, setPendingReviews] = useState<any[]>([]); // 3. Change pendingReviews state type
+  const [assignments] = useState([]); // No longer using mockAssignments, keeping it empty for now
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,6 +46,14 @@ export function TeacherDashboard() {
           setIsLoadingClasses(false);
         }
 
+        // Fetch assignments for deadlines
+        try {
+          const assignmentRes = await assignmentApi.getTeacherAssignments(5, 0); // Fetch top 5 soonest
+          setUpcomingDeadlines(assignmentRes.data || []);
+        } catch (error) {
+            console.error("Failed to fetch deadlines:", error);
+        }
+
         try {
             setIsLoadingStudents(true);
             const studentRes = await userApi.getLearners();
@@ -54,6 +63,14 @@ export function TeacherDashboard() {
             console.error("Failed to fetch students:", error);
         } finally {
             setIsLoadingStudents(false);
+        }
+
+        // 4. Add attemptApi.getPendingTeacherAttempts() call
+        try {
+          const pendingRes = await attemptApi.getPendingTeacherAttempts(5, 0); // Fetch top 5 pending
+          setPendingReviews(pendingRes.data || []);
+        } catch (error) {
+          console.error("Failed to fetch pending reviews:", error);
         }
       }
     };
@@ -69,15 +86,41 @@ export function TeacherDashboard() {
     navigate(ROUTES.TEACHER.STUDENT_DETAIL.replace(":studentId", studentId));
   };
 
-  const handleViewFullFeedback = (submissionId: string) => {
-    console.log("View feedback:", submissionId);
+  
+  const handleViewFullFeedback = (attemptId: string) => {
+    if (!attemptId) {
+        console.error("Missing attemptId for navigation");
+        return;
+    }
+    navigate(ROUTES.TEACHER.GRADING.replace(":attemptId", attemptId));
   };
+  
+
   
   const getStudentName = (student: User) => {
       if (student.firstName && student.lastName) return `${student.firstName} ${student.lastName}`;
       if (student.name) return student.name;
       return student.email.split('@')[0];
   }
+
+  const getDueText = (dateStr: string) => {
+      const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 3600 * 24));
+      if (days < 0) return `Overdue by ${Math.abs(days)} days`;
+      if (days === 0) return "Due today";
+      return `Due in ${days} days`;
+  };
+
+  const getSubmittedText = (dateStr: string) => {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffTime = now.getTime() - date.getTime();
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 0) return `${diffDays}d ago`;
+      if (diffHours > 0) return `${diffHours}h ago`;
+      return "Just now";
+  };
 
   return (
     <div className='flex flex-col animate-in fade-in duration-300'>
@@ -264,8 +307,9 @@ export function TeacherDashboard() {
                 <table className='w-full text-sm text-left'>
                   <thead className='bg-slate-50 text-xs uppercase text-slate-500'>
                     <tr>
-                      <th className='px-6 py-3 font-medium'>Student Name</th>
-                      <th className='px-6 py-3 font-medium'>Task Title</th>
+                      <th className='px-6 py-3 font-medium'>Student</th>
+                      <th className='px-6 py-3 font-medium'>Class</th>
+                      <th className='px-6 py-3 font-medium'>Task Name</th>
                       <th className='px-6 py-3 font-medium'>Submitted</th>
                       <th className='px-6 py-3 font-medium'></th>
                     </tr>
@@ -277,14 +321,20 @@ export function TeacherDashboard() {
                           key={sub.id}
                           className='hover:bg-slate-50 transition-colors'
                         >
-                          <td className='px-6 py-4 font-medium text-slate-900'>
-                            {sub.studentName}
+                          <td className='px-6 py-4'>
+                             <div className="flex flex-col">
+                                <span className="font-medium text-slate-900">{sub.studentName}</span>
+                                <span className="text-xs text-slate-500">{sub.studentEmail}</span>
+                             </div>
                           </td>
                           <td className='px-6 py-4 text-slate-600'>
+                            {sub.className}
+                          </td>
+                          <td className='px-6 py-4 text-slate-600 font-medium'>
                             {sub.assignmentTitle}
                           </td>
                           <td className='px-6 py-4 text-slate-500'>
-                            {new Date(sub.submittedAt).toLocaleDateString()}
+                            {getSubmittedText(sub.submittedAt)}
                           </td>
                           <td className='px-6 py-4 text-right'>
                             <button
@@ -299,7 +349,7 @@ export function TeacherDashboard() {
                     ) : (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           className='px-6 py-8 text-center text-slate-400'
                         >
                           No pending reviews.
@@ -437,28 +487,30 @@ export function TeacherDashboard() {
               Upcoming Deadlines
             </h2>
             <div className='flex flex-col gap-3'>
-              <div className='flex items-start gap-3 rounded-lg p-3 bg-white border border-slate-200'>
-                <div className='shrink-0 size-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center'>
-                  <Clock size={16} />
+              {upcomingDeadlines.length > 0 ? (
+                upcomingDeadlines.map((item: any) => (
+                  <div key={item.id} className='flex items-start gap-4 rounded-xl p-4 bg-white border border-slate-200 shadow-sm'>
+                    <div className='shrink-0 size-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center'>
+                      <Clock size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className='text-sm font-semibold text-slate-900 truncate'>
+                        {item.title}
+                      </p>
+                      <p className='text-xs text-slate-500 mt-0.5'>{item.className || 'Class'}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                        <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                            {getDueText(item.deadline)}
+                        </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-slate-500 italic p-4 text-center bg-slate-50 rounded-lg">
+                    No upcoming deadlines.
                 </div>
-                <div>
-                  <p className='text-sm font-medium text-slate-900'>
-                    Final Paper Submission
-                  </p>
-                  <p className='text-xs text-slate-500'>Due in 2 days</p>
-                </div>
-              </div>
-              <div className='flex items-start gap-3 rounded-lg p-3 bg-white border border-slate-200'>
-                <div className='shrink-0 size-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center'>
-                  <Calendar size={16} />
-                </div>
-                <div>
-                  <p className='text-sm font-medium text-slate-900'>
-                    Peer Review Session
-                  </p>
-                  <p className='text-xs text-slate-500'>Due in 5 days</p>
-                </div>
-              </div>
+              )}
             </div>
           </section>
 

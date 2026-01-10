@@ -173,6 +173,17 @@ export interface Assignment {
   status: AssignmentStatus;
   createdAt: string;
   updatedAt: string;
+  class?: {
+    id: string;
+    name: string;
+  };
+  prompt?: {
+    id: string;
+    title: string;
+    skillType: string;
+    content?: string;
+  };
+  attemptId?: string;
 }
 
 export interface AssignmentList {

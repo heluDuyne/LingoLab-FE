@@ -25,6 +25,7 @@ export const ROUTES = {
     REPORTS: "/teacher/reports",
     PROFILE: "/teacher/profile",
     SETTINGS: "/teacher/settings",
+    GRADING: "/teacher/grading/:attemptId",
   },
 
   // Student routes

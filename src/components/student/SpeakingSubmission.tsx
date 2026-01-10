@@ -7,6 +7,7 @@ interface SpeakingSubmissionProps {
   audioFile: File | null;
   setAudioFile: (file: File | null) => void;
   readOnly?: boolean;
+  existingAudioUrl?: string | null;
   formatTime: (seconds: number) => string;
 }
 
@@ -17,6 +18,7 @@ export function SpeakingSubmission({
   audioFile,
   setAudioFile,
   readOnly = false,
+  existingAudioUrl,
   formatTime,
 }: SpeakingSubmissionProps) {
   return (
@@ -99,7 +101,7 @@ export function SpeakingSubmission({
             Or upload an audio file
           </div>
 
-          {!audioFile && !readOnly ? (
+          {!audioFile && !existingAudioUrl && !readOnly ? (
             <label className="flex-1 border border-slate-200 rounded-lg p-4 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-slate-50 transition-colors bg-white min-h-[200px]">
               <div className="size-10 rounded-full bg-blue-50 text-purple-600 flex items-center justify-center">
                 <Upload size={20} />

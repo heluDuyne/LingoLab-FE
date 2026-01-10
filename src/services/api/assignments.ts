@@ -24,5 +24,12 @@ export const assignmentApi = {
       params: { limit, offset }
     });
     return data;
+  },
+
+  getTeacherAssignments: async (limit: number = 10, offset: number = 0): Promise<PaginatedResponse<AssignmentList>> => {
+    const { data } = await apiClient.get<PaginatedResponse<AssignmentList>>("/assignments/teacher/my-created", {
+      params: { limit, offset }
+    });
+    return data;
   }
 };

@@ -2,7 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuthStore } from "@/stores";
 import { TaskCard } from "@/components/student";
-import { ROUTES } from "@/constants"; // Added import
+import { ROUTES } from "@/constants";
+import { attemptApi } from "@/services/api/attempts";
+import { BadgeStatus } from "@/components/ui/badge-status";
+import { Clock } from "lucide-react";
 
 // Types
 type TaskFilter = "ALL" | "TODO" | "SUBMITTED";
@@ -11,24 +14,32 @@ export function StudentDashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("ALL");
-  const [assignments, setAssignments] = useState<any[]>([]); // Using any for transition or AssignmentList mapped
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load assignments
+  // Load assignments and recent activity
   useEffect(() => {
-    const loadAssignments = async () => {
+    const loadData = async () => {
       try {
         const { assignmentApi } = await import("@/services/api/assignments");
-        const response = await assignmentApi.getMyAssignments(50, 0);
-        setAssignments(response.data);
+        const [assignmentsRes, activityRes] = await Promise.all([
+             assignmentApi.getMyAssignments(50, 0),
+             user?.id ? attemptApi.getAttemptsByLearner(user.id, 5) : Promise.resolve({ data: [] })
+        ]);
+
+        setAssignments(assignmentsRes.data);
+        setRecentActivity(activityRes.data || []);
       } catch (error) {
-        console.error("Failed to load assignments", error);
+        console.error("Failed to load dashboard data", error);
       } finally {
         setLoading(false);
       }
     };
-    loadAssignments();
-  }, []);
+    if (user?.id) {
+        loadData();
+    }
+  }, [user?.id]);
 
   // Filter assignments based on selected tab
   const filteredAssignments = assignments.filter((assignment) => {
@@ -44,9 +55,10 @@ export function StudentDashboard() {
     .slice(0, 3);
 
   const handleTaskAction = (assignmentId: string) => {
-    // Navigate to submission page/detail based on type
     const assignment = assignments.find(a => a.id === assignmentId);
-    if (assignment?.type === "SPEAKING") {
+    
+    const type = assignment?.type?.toUpperCase();
+    if (type === "SPEAKING") {
         navigate(ROUTES.LEARNER.SPEAKING_SUBMISSION.replace(":assignmentId", assignmentId));
     } else {
         navigate(ROUTES.LEARNER.WRITING_SUBMISSION.replace(":assignmentId", assignmentId));
@@ -96,8 +108,9 @@ export function StudentDashboard() {
             {/* Tasks List */}
             <div className='space-y-4'>
               {filteredAssignments.map((assignment) => {
-                const isGraded = assignment.submissionStatus === "GRADED";
-                const isSubmitted = assignment.submissionStatus === "SUBMITTED" || isGraded;
+                const status = assignment.submissionStatus?.toLowerCase();
+                const isGraded = status === "scored" || status === "graded";
+                const isSubmitted = status === "submitted" || isGraded;
 
                 return (
                   <TaskCard
@@ -183,38 +196,64 @@ export function StudentDashboard() {
             </div>
           </section>
 
-          {/* Course Progress - Static for now */}
+          {/* Recent Activity */}
           <section>
-            <h3 className='text-lg font-bold text-slate-900 mb-4'>
-              Course Progress
-            </h3>
-            <div className='space-y-3'>
-              <div className='bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3'>
-                <div className='flex justify-between items-center'>
-                  <p className='font-semibold text-slate-900'>IELTS Writing</p>
-                  <span className='text-xs font-bold text-slate-400'>75%</span>
-                </div>
-                <div className='w-full bg-slate-100 rounded-full h-2'>
-                  <div
-                    className='bg-purple-500 h-2 rounded-full'
-                    style={{ width: "75%" }}
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
+             <h3 className='text-lg font-bold text-slate-900 mb-4'>
+               Recent Activity
+             </h3>
+             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                 {recentActivity.length > 0 ? (
+                     recentActivity.map((attempt) => {
+                         // Fix status check to handle potential casing mismatch, but prefer lowercase as per backend
+                         const statusLower = attempt.status.toLowerCase();
+                         const isSubmitted = ['submitted', 'scored'].includes(statusLower);
+                         const isPastDue = !isSubmitted && attempt.deadline && new Date(attempt.deadline) < new Date();
+                         
+                         let statusLabel = attempt.status;
+                         let badgeVariant: 'default' | 'outline' | 'secondary' | 'error' | 'success' | 'warning' | 'info' = 'info';
+                         
+                         if (isSubmitted) {
+                             badgeVariant = 'success';
+                             // statusLabel remains as is (e.g. SUBMITTED or SCORED)
+                         } else if (isPastDue) {
+                             badgeVariant = 'error';
+                             statusLabel = 'PAST DUE';
+                         } else {
+                             badgeVariant = 'info';
+                             statusLabel = 'IN PROGRESS';
+                         }
 
-          {/* Recent Activity - Static for now */}
-          <section>
-             {/* Retaining static structure to maintain layout */}
-             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                 <p className="text-slate-500 text-sm">Recent activity will appear here.</p>
+                         return (
+                         <div key={attempt.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                             <div className={`p-2 rounded-full ${isSubmitted ? 'bg-green-100 text-green-600' : isPastDue ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                 <Clock size={16} />
+                             </div>
+                             <div>
+                                 <p className="text-sm font-bold text-slate-900 line-clamp-1">
+                                    {attempt.title || "Untitled Task"}
+                                 </p>
+                                 <p className="text-xs text-slate-500 mb-1">
+                                     {attempt.skillType === 'writing' ? 'Writing Task' : 'Speaking Task'}
+                                 </p>
+                                 <div className="flex items-center gap-2">
+                                    <BadgeStatus variant={badgeVariant}>
+                                        {statusLabel.toUpperCase().replace('_', ' ')}
+                                    </BadgeStatus>
+                                    <span className="text-xs text-slate-500">
+                                        {new Date(attempt.updatedAt || attempt.submittedAt || attempt.createdAt).toLocaleDateString()}
+                                    </span>
+                                 </div>
+                             </div>
+                         </div>
+                         );
+                     })
+                 ) : (
+                     <p className="text-slate-500 text-sm text-center">No recent activity.</p>
+                 )}
              </div>
           </section>
         </div>
       </div>
-      
-      {/* Sidebar temporarily disabled as we lack submission ID in list */}
     </div>
   );
 }

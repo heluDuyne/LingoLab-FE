@@ -6,16 +6,19 @@ import {
   FileText,
   Send,
   Save,
-  AlertCircle,
-  CheckCircle,
-  Info,
   Loader2,
+  CheckCircle,
+  AlertCircle,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
 import { WritingSubmission } from "@/components/student/WritingSubmission";
 import { ROUTES } from "@/constants";
 import { assignmentApi } from "@/services/api/assignments";
+import { attemptApi } from "@/services/api/attempts";
+import { useAuthStore } from "@/stores";
+import { toast } from "sonner";
 
 // Types
 interface AssignmentUI {
@@ -28,24 +31,34 @@ interface AssignmentUI {
   instructions: string[];
   wordLimit?: { min: number; max: number };
   timeLimit?: number; // in minutes
+  promptId?: string;
 }
 
 export function WritingSubmissionPage() {
   const navigate = useNavigate();
   const { assignmentId } = useParams();
+  const { user } = useAuthStore();
   const [text, setText] = useState("");
   const [autoSaved, setAutoSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<any>(null); // Mock feedback
   
   const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAssignment = async () => {
-      if (!assignmentId) return;
+      console.log("Fetching assignment. User ID:", user?.id);
+      if (!assignmentId || !user?.id) return;
       try {
-        const data = await assignmentApi.getAssignmentById(assignmentId);
+        const data = await assignmentApi.getAssignmentById(assignmentId) as any;
+        console.log("DEBUG: Full Assignment Data:", data);
+        console.log("DEBUG: submissionStatus:", data.submissionStatus);
+        console.log("DEBUG: attemptId:", data.attemptId);
         
         // Transform API data to UI model
         setAssignment({
@@ -55,23 +68,62 @@ export function WritingSubmissionPage() {
             type: "WRITING",
             dueDate: data.deadline.toString(),
             description: data.prompt?.title || data.description || "No description provided.",
-            // Mock instructions/limits for now as they aren't in API yet
+            promptId: data.prompt?.id || data.promptId,
+            // Mock instructions/limits
             instructions: [
                 "Read the prompt carefully before you begin writing",
                 "Plan your essay structure",
                 "Review your work before submitting",
             ],
-            wordLimit: { min: 150, max: 400 },
+            wordLimit: { min: 40, max: 400 },
         });
+
+        // Handle attempt creation/retrieval
+        if (data.attemptId) {
+            console.log("Found existing attempt:", data.attemptId);
+            setAttemptId(data.attemptId);
+            setSubmissionStatus(data.submissionStatus || null);
+            
+            // If submitted, load the content (assuming getAssignmentById might not return content, verification needed)
+            // For now, if we have attemptId, we should fetch attempt details to get the content
+            const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+            setText(attemptDetails.content || "");
+            
+            if (data.submissionStatus === 'submitted' || data.submissionStatus === 'scored') {
+                 // Mock AI Feedback if submitted
+                 setFeedback({
+                     score: 7.5,
+                     summary: "Good job! You used complex vocabulary.",
+                     details: "Your structure is solid, but watch out for run-on sentences."
+                 });
+            }
+
+        } else if (data.prompt?.id || data.promptId) {
+             const promptId = data.prompt?.id || data.promptId;
+             console.log("Creating new attempt for prompt:", promptId);
+             const newAttempt = await attemptApi.createAttempt({
+                learnerId: user.id,
+                promptId: promptId,
+                assignmentId: assignmentId,
+                skillType: "writing"
+            });
+            console.log("Created new attempt:", newAttempt);
+            setAttemptId(newAttempt.id);
+        } else {
+            console.warn("No attempt found and no prompt ID available to create one.");
+        }
+
       } catch (err) {
-        console.error("Failed to load assignment", err);
+        console.error("Failed to load assignment or create attempt", err);
         // handle error (navigate back or show error)
       } finally {
         setLoading(false);
       }
     };
-    fetchAssignment();
-  }, [assignmentId]);
+    if (user?.id) {
+        fetchAssignment();
+    }
+  }, [assignmentId, user?.id]);
 
   // Auto-save effect
   useEffect(() => {
@@ -85,35 +137,7 @@ export function WritingSubmissionPage() {
     }
   }, [text]);
 
-  if (loading) {
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-        </div>
-    );
-  }
-
-  if (!assignment) {
-      return (
-          <div className="flex h-screen items-center justify-center flex-col gap-4">
-              <p>Assignment not found.</p>
-              <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
-                  Back to Dashboard
-              </Button>
-          </div>
-      );
-  }
-
-  const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
-  const isWordCountValid =
-    assignment.wordLimit &&
-    wordCount >= assignment.wordLimit.min &&
-    wordCount <= assignment.wordLimit.max;
-  const isUnderMinimum = assignment.wordLimit && wordCount < assignment.wordLimit.min;
-
-  const handleBack = () => {
-    navigate(ROUTES.LEARNER.DASHBOARD);
-  };
+  // ... (renders) ...
 
   const handleSaveDraft = () => {
     // Simulate saving draft
@@ -122,6 +146,10 @@ export function WritingSubmissionPage() {
   };
 
   const handleSubmit = async () => {
+    // Basic validation
+    const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
+    const isUnderMinimum = assignment?.wordLimit && wordCount < assignment.wordLimit.min;
+    
     if (isUnderMinimum) {
       setShowConfirmDialog(true);
       return;
@@ -130,14 +158,58 @@ export function WritingSubmissionPage() {
   };
 
   const submitWork = async () => {
+    if (!attemptId) {
+        console.error("Attempt ID is missing");
+        setError("Session error: Attempt ID not found. Please refresh the page.");
+        return;
+    }
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    setShowConfirmDialog(false);
-    // Navigate back to dashboard after successful submission
+    setError(null);
+    try {
+        await attemptApi.submitAttempt(attemptId, {
+            content: text,
+        });
+        toast.success("Submission successful!");
+        navigate(ROUTES.LEARNER.DASHBOARD);
+    } catch (err: any) {
+        console.error("Submission failed", err);
+        const errorMessage = err.message || "Failed to submit. Please try again.";
+        setError(errorMessage);
+        toast.error(errorMessage);
+    } finally {
+        setIsSubmitting(false);
+        setShowConfirmDialog(false);
+    }
+  };
+
+  const handleBack = () => {
     navigate(ROUTES.LEARNER.DASHBOARD);
   };
+
+  const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
+  const isWordCountValid =
+    assignment &&
+    assignment.wordLimit &&
+    wordCount >= assignment.wordLimit.min &&
+    wordCount <= assignment.wordLimit.max;
+  const isUnderMinimum = assignment && assignment.wordLimit && wordCount < assignment.wordLimit.min;
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
+
+  if (!assignment) {
+    return (
+      <div className="flex h-screen items-center justify-center flex-col gap-4">
+        <p>Assignment not found.</p>
+        <Button onClick={handleBack}>Back to Dashboard</Button>
+      </div>
+    );
+  }
 
   const getDaysUntilDue = () => {
     const dueDate = new Date(assignment.dueDate);
@@ -179,73 +251,122 @@ export function WritingSubmissionPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              className="gap-2 border-slate-300"
-              onClick={handleSaveDraft}
-            >
-              <Save size={16} />
-              Save Draft
-            </Button>
-            <Button
-              className="gap-2 bg-purple-600 hover:bg-purple-700"
-              onClick={handleSubmit}
-              disabled={isSubmitting || wordCount === 0}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  Submit
-                </>
-              )}
-            </Button>
+            {!(submissionStatus === 'submitted' || submissionStatus === 'scored') && (
+            <>
+                <Button
+                variant="outline"
+                className="gap-2 border-slate-300"
+                onClick={handleSaveDraft}
+                >
+                <Save size={16} />
+                Save Draft
+                </Button>
+                <Button
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+                onClick={handleSubmit}
+                disabled={isSubmitting || wordCount === 0}
+                >
+                {isSubmitting ? (
+                    <>
+                    <span className="animate-spin">⏳</span>
+                    Submitting...
+                    </>
+                ) : (
+                    <>
+                    <Send size={16} />
+                    Submit
+                    </>
+                )}
+                </Button>
+            </>
+            )}
           </div>
         </div>
       </div>
 
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700 animate-in fade-in slide-in-from-top-2">
+            <AlertCircle size={20} className="shrink-0" />
+            <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content - Writing Area */}
         <div className="lg:col-span-2">
-          <WritingSubmission
-            text={text}
-            onChange={setText}
-            readOnly={false}
-            autoSaved={autoSaved}
-          />
+          {submissionStatus === 'submitted' || submissionStatus === 'scored' ? (
+              <div className="space-y-6">
+                 {/* Feedback Section */}
+                 <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                        <CheckCircle className="text-green-600" size={24} />
+                        <h3 className="text-xl font-bold text-green-900">Submission Received</h3>
+                        <span className="ml-auto bg-green-200 text-green-800 px-3 py-1 rounded-full text-sm font-bold">
+                            Score: {feedback?.score || "Pending"}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-lg bg-opacity-60">
+                             <h4 className="font-bold text-green-800 mb-2">AI Summary</h4>
+                             <p className="text-green-700 text-sm">{feedback?.summary || "AI is analyzing your submission..."}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg bg-opacity-60">
+                             <h4 className="font-bold text-green-800 mb-2">Details</h4>
+                             <p className="text-green-700 text-sm">{feedback?.details}</p>
+                        </div>
+                    </div>
+                 </div>
 
-          {/* Word Count Status */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {isWordCountValid ? (
-                <CheckCircle size={16} className="text-green-500" />
-              ) : isUnderMinimum ? (
-                <AlertCircle size={16} className="text-amber-500" />
-              ) : (
-                <AlertCircle size={16} className="text-red-500" />
-              )}
-              <span
-                className={`text-sm font-medium ${
-                  isWordCountValid
-                    ? "text-green-600"
-                    : isUnderMinimum
-                      ? "text-amber-600"
-                      : "text-red-600"
-                }`}
-              >
-                {wordCount} / {assignment.wordLimit?.min}-{assignment.wordLimit?.max} words
-              </span>
-            </div>
-            {isUnderMinimum && (
-              <span className="text-xs text-amber-600">
-                {assignment.wordLimit!.min - wordCount} more words needed
-              </span>
-            )}
-          </div>
+                 {/* Read Only View */}
+                 <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <FileText size={18} className="text-slate-500" />
+                        Your Response
+                    </h3>
+                    <div className="prose max-w-none text-slate-700 whitespace-pre-wrap">
+                        {text}
+                    </div>
+                 </div>
+              </div>
+          ) : (
+            <>
+              <WritingSubmission
+                text={text}
+                onChange={setText}
+                readOnly={false}
+                autoSaved={autoSaved}
+              />
+
+              {/* Word Count Status */}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isWordCountValid ? (
+                    <CheckCircle size={16} className="text-green-500" />
+                  ) : isUnderMinimum ? (
+                    <AlertCircle size={16} className="text-amber-500" />
+                  ) : (
+                    <AlertCircle size={16} className="text-red-500" />
+                  )}
+                  <span
+                    className={`text-sm font-medium ${
+                      isWordCountValid
+                        ? "text-green-600"
+                        : isUnderMinimum
+                          ? "text-amber-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {wordCount} / {assignment.wordLimit?.min}-{assignment.wordLimit?.max} words
+                  </span>
+                </div>
+                {isUnderMinimum && (
+                  <span className="text-xs text-amber-600">
+                    {assignment.wordLimit!.min - wordCount} more words needed
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Sidebar - Instructions */}
