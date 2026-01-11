@@ -37,4 +37,9 @@ export const attemptApi = {
     });
     return response.data;
   },
+
+  gradeAttempt: async (id: string, data: { score: number; feedback: string }) => {
+    const response = await apiClient.put(`/attempts/${id}/grade`, data);
+    return response.data;
+  },
 };

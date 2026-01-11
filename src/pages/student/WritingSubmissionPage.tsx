@@ -10,6 +10,7 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
@@ -86,18 +87,23 @@ export function WritingSubmissionPage() {
             
             // If submitted, load the content (assuming getAssignmentById might not return content, verification needed)
             // For now, if we have attemptId, we should fetch attempt details to get the content
+            // If submitted, load the content
             const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+            console.log("DEBUG: Attempt Details from Backend:", attemptDetails); // Debug log
             setText(attemptDetails.content || "");
             
-            if (data.submissionStatus === 'submitted' || data.submissionStatus === 'scored') {
-                 // Mock AI Feedback if submitted
+            // Set feedback if available
+            if (attemptDetails.score) {
                  setFeedback({
-                     score: 7.5,
-                     summary: "Good job! You used complex vocabulary.",
-                     details: "Your structure is solid, but watch out for run-on sentences."
+                     score: attemptDetails.score.overallBand,
+                     summary: attemptDetails.score.feedback,
+                     // If we have detailed feedback from AI/Teacher, we can map it here. 
+                     // For now, let's map feedback string to summary.
+                     details: attemptDetails.score.detailedFeedback?.note || ""
                  });
             }
-
+            // Removing Mock Feedback Block
+            
         } else if (data.prompt?.id || data.promptId) {
              const promptId = data.prompt?.id || data.promptId;
              console.log("Creating new attempt for prompt:", promptId);
@@ -297,25 +303,32 @@ export function WritingSubmissionPage() {
           {submissionStatus === 'submitted' || submissionStatus === 'scored' ? (
               <div className="space-y-6">
                  {/* Feedback Section */}
-                 <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <CheckCircle className="text-green-600" size={24} />
-                        <h3 className="text-xl font-bold text-green-900">Submission Received</h3>
-                        <span className="ml-auto bg-green-200 text-green-800 px-3 py-1 rounded-full text-sm font-bold">
-                            Score: {feedback?.score || "Pending"}
-                        </span>
+                 {/* Feedback Section */}
+                 {(submissionStatus === 'scored' || feedback) && (
+                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500 mb-6">
+                    <div className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between">
+                        <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                            <Star className="w-5 h-5 fill-purple-600 text-purple-600" />
+                            Teacher Feedback
+                        </h3>
+                        <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-purple-100">
+                            <span className="text-xs uppercase font-bold text-purple-400 mr-2">Band Score</span>
+                            <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-white p-4 rounded-lg bg-opacity-60">
-                             <h4 className="font-bold text-green-800 mb-2">AI Summary</h4>
-                             <p className="text-green-700 text-sm">{feedback?.summary || "AI is analyzing your submission..."}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg bg-opacity-60">
-                             <h4 className="font-bold text-green-800 mb-2">Details</h4>
-                             <p className="text-green-700 text-sm">{feedback?.details}</p>
-                        </div>
+                    <div className="p-6">
+                        <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                            {feedback?.summary || "No comments provided."}
+                        </p>
+                        {feedback?.details && (
+                             <p className="text-slate-500 text-sm mt-4 italic border-t border-slate-100 pt-4">
+                                {feedback.details}
+                             </p>
+                        )}
                     </div>
                  </div>
+                 )}
 
                  {/* Read Only View */}
                  <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">

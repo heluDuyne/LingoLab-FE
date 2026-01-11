@@ -12,6 +12,7 @@ import {
   Play,
   Pause,
   Loader2,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
@@ -49,21 +50,42 @@ export function SpeakingSubmissionPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [existingAudioUrl, setExistingAudioUrl] = useState<string | null>(null);
   const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
+  const [attemptResult, setAttemptResult] = useState<any>(null);
 
   // Audio playback state
   const [isPlaying, setIsPlaying] = useState(false);
 
   const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // ... (previous code)
+  const [feedback, setFeedback] = useState<any>(null); // Feedback state
 
   useEffect(() => {
     const fetchAssignment = async () => {
       if (!assignmentId || !user?.id) return;
       try {
+        console.log("Fetching assignment:", assignmentId); // Debug log
+
+
+        
         const data = await assignmentApi.getAssignmentById(assignmentId) as any;
-        // ... (data mapping)
+        
+        // Transform API data to UI model
+        setAssignment({
+            id: data.id,
+            title: data.title,
+            className: data.class?.name || "Class",
+            type: "SPEAKING",
+            dueDate: data.deadline.toString(),
+            description: data.prompt?.title || data.description || "No description provided.",
+            prompt: data.prompt?.content || "No prompt content",
+            speakingTime: 120, // Default or fetch from assignment/prompt
+            tips: [
+                "Speak clearly and at a natural pace",
+                "Try to use a variety of vocabulary",
+                "Don't worry about small mistakes, focus on communication"
+            ],
+            promptId: data.prompt?.id || data.promptId,
+        });
         
         // Handle attempt creation/retrieval
         if (data.attemptId) {
@@ -73,12 +95,24 @@ export function SpeakingSubmissionPage() {
             // Fetch full attempt details to get the content/media
             try {
                 const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+                console.log("Attempt Details:", attemptDetails); // Debug log
+                setAttemptResult(attemptDetails);
+                
                 if (attemptDetails.media && attemptDetails.media.length > 0) {
                     setExistingAudioUrl(attemptDetails.media[0].storageUrl);
                 } else if (attemptDetails.content) {
-                    // Fallback if content was used for URL storage
                     setExistingAudioUrl(attemptDetails.content);
                 }
+
+                // Set feedback if available (Logic ported from WritingSubmissionPage)
+                if (attemptDetails.score) {
+                     setFeedback({
+                         score: attemptDetails.score.overallBand,
+                         summary: attemptDetails.score.feedback,
+                         details: attemptDetails.score.detailedFeedback?.note || ""
+                     });
+                }
+
             } catch (err) {
                 console.error("Failed to fetch attempt details", err);
             }
@@ -177,8 +211,7 @@ export function SpeakingSubmissionPage() {
         const mockAudioUrl = "mock-audio-file.mp3"; 
 
         await attemptApi.submitAttempt(attemptId, {
-            content: mockAudioUrl,
-            status: "SUBMITTED"
+            content: mockAudioUrl
         });
         navigate(ROUTES.LEARNER.DASHBOARD);
     } catch (error) {
@@ -322,6 +355,34 @@ export function SpeakingSubmissionPage() {
                 {isPlaying ? <Pause size={16} /> : <Play size={16} />}
                 {isPlaying ? "Pause" : "Preview"}
               </Button>
+            </div>
+          )}
+
+          {/* Teacher Grading Result */}
+          {/* Teacher Grading Result */}
+          {(submissionStatus === 'scored' || feedback) && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+               <div className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between">
+                   <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                       <Star className="w-5 h-5 fill-purple-600 text-purple-600" />
+                       Teacher Feedback
+                   </h3>
+                   <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-purple-100">
+                       <span className="text-xs uppercase font-bold text-purple-400 mr-2">Band Score</span>
+                       <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
+                   </div>
+               </div>
+               <div className="p-6">
+                   <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
+                   <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                       {feedback?.summary || "No comments provided."}
+                   </p>
+                    {feedback?.details && (
+                        <p className="text-slate-500 text-sm mt-4 italic border-t border-slate-100 pt-4">
+                        {feedback.details}
+                        </p>
+                    )}
+               </div>
             </div>
           )}
         </div>

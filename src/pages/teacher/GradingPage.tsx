@@ -42,14 +42,17 @@ export function GradingPage() {
     
     // Validate score
     const numScore = parseFloat(score);
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) { // Assuming 9.0 scale for IELTS, but sticking to 100 for generic unless specified
-        // Logic check: User UI shows "/ 9.0". Let's assume standard 0-10 or 0-9 scale if it looks like IELTS?
-        // Let's stick to 0-100 internally or check prompt type. 
-        // For now, loose validation.
+    if (isNaN(numScore) || numScore < 0 || numScore > 100) { 
+        toast.error("Please enter a valid numeric score");
+        return;
     }
 
     try {
       setIsSubmitting(true);
+      await attemptApi.gradeAttempt(attemptId, {
+          score: numScore,
+          feedback: feedback
+      });
       toast.success("Grading saved successfully!");
       navigate(-1);
     } catch (error) {

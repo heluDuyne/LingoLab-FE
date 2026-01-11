@@ -11,6 +11,7 @@ import {
   Calendar,
   Upload,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores";
@@ -33,6 +34,14 @@ export function TeacherDashboard() {
   const [assignments] = useState([]); // No longer using mockAssignments, keeping it empty for now
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
 
+  const [assignmentStats, setAssignmentStats] = useState({
+    completed: 0,
+    pending: 0,
+    overdue: 0,
+    completionRate: 0,
+    totalExpected: 0
+  });
+
   useEffect(() => {
     const fetchData = async () => {
       if (user?.id) {
@@ -46,18 +55,59 @@ export function TeacherDashboard() {
           setIsLoadingClasses(false);
         }
 
-        // Fetch assignments for deadlines
+        // Fetch assignments for deadlines and stats
         try {
-          const assignmentRes = await assignmentApi.getTeacherAssignments(5, 0); // Fetch top 5 soonest
-          setUpcomingDeadlines(assignmentRes.data || []);
+          const assignmentRes = await assignmentApi.getTeacherAssignments(50, 0); // Fetch top 50
+          const allAssignments = assignmentRes.data || [];
+
+          // Stats Calculation
+          let completed = 0;
+          let pending = 0;
+          let overdue = 0;
+          let totalExpected = 0;
+          const now = new Date();
+
+          allAssignments.forEach((a) => {
+              const enrolled = a.totalEnrolled || 0;
+              const submitted = a.totalSubmitted || 0;
+              const remaining = Math.max(0, enrolled - submitted);
+              // Check if assignment is past due
+              const isPastDue = new Date(a.deadline) < now;
+
+              totalExpected += enrolled;
+              completed += submitted;
+
+              if (remaining > 0) {
+                  if (isPastDue) {
+                      overdue += remaining;
+                  } else {
+                      pending += remaining;
+                  }
+              }
+          });
+
+          const rate = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
+          setAssignmentStats({
+              completed,
+              pending,
+              overdue,
+              completionRate: rate,
+              totalExpected
+          });
+          
+          // Filter for upcoming deadlines (future dates)
+          const futureAssignments = allAssignments.filter(a => new Date(a.deadline) > now);
+          // Sort by deadline asc
+          futureAssignments.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+          setUpcomingDeadlines(futureAssignments.slice(0, 5));
+
         } catch (error) {
-            console.error("Failed to fetch deadlines:", error);
+            console.error("Failed to fetch assignments:", error);
         }
 
         try {
             setIsLoadingStudents(true);
             const studentRes = await userApi.getLearners();
-            // Take top 5 for preview
             setStudents((studentRes.data || []).slice(0, 5)); 
         } catch (error) {
             console.error("Failed to fetch students:", error);
@@ -65,9 +115,8 @@ export function TeacherDashboard() {
             setIsLoadingStudents(false);
         }
 
-        // 4. Add attemptApi.getPendingTeacherAttempts() call
         try {
-          const pendingRes = await attemptApi.getPendingTeacherAttempts(5, 0); // Fetch top 5 pending
+          const pendingRes = await attemptApi.getPendingTeacherAttempts(50, 0);
           setPendingReviews(pendingRes.data || []);
         } catch (error) {
           console.error("Failed to fetch pending reviews:", error);
@@ -87,12 +136,18 @@ export function TeacherDashboard() {
   };
 
   
-  const handleViewFullFeedback = (attemptId: string) => {
+  const handleViewFullFeedback = (attemptId: string, skillType?: string) => {
+    console.log("Navigating to grade:", attemptId, "Skill:", skillType); // Debug log
     if (!attemptId) {
         console.error("Missing attemptId for navigation");
         return;
     }
-    navigate(ROUTES.TEACHER.GRADING.replace(":attemptId", attemptId));
+    
+    if (skillType?.toUpperCase() === "SPEAKING") {
+        navigate(`/teacher/grading/speaking/${attemptId}`);
+    } else {
+        navigate(ROUTES.TEACHER.GRADING.replace(":attemptId", attemptId));
+    }
   };
   
 
@@ -121,6 +176,13 @@ export function TeacherDashboard() {
       if (diffHours > 0) return `${diffHours}h ago`;
       return "Just now";
   };
+
+  // Pie Chart Data
+  const pieData = [
+    { name: 'Completed', value: assignmentStats.completed, color: '#9333ea' }, // purple-600
+    { name: 'In Progress', value: assignmentStats.pending, color: '#fbbf24' }, // amber-400
+    { name: 'Overdue', value: assignmentStats.overdue, color: '#ef4444' },     // red-500
+  ].filter(d => d.value > 0);
 
   return (
     <div className='flex flex-col animate-in fade-in duration-300'>
@@ -303,9 +365,9 @@ export function TeacherDashboard() {
               Pending Reviews
             </h2>
             <div className='w-full rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden'>
-              <div className='overflow-x-auto'>
-                <table className='w-full text-sm text-left'>
-                  <thead className='bg-slate-50 text-xs uppercase text-slate-500'>
+              <div className='overflow-x-auto max-h-96 overflow-y-auto'>
+                <table className='w-full text-sm text-left relative'>
+                  <thead className='bg-slate-50 text-xs uppercase text-slate-500 sticky top-0 z-10 shadow-sm'>
                     <tr>
                       <th className='px-6 py-3 font-medium'>Student</th>
                       <th className='px-6 py-3 font-medium'>Class</th>
@@ -338,7 +400,7 @@ export function TeacherDashboard() {
                           </td>
                           <td className='px-6 py-4 text-right'>
                             <button
-                              onClick={() => handleViewFullFeedback(sub.id)}
+                              onClick={() => handleViewFullFeedback(sub.id, sub.skillType)}
                               className='rounded-lg h-8 px-3 bg-purple-50 text-purple-700 text-xs font-bold hover:bg-purple-100 transition-colors'
                             >
                               Review
@@ -376,61 +438,50 @@ export function TeacherDashboard() {
                   Across all active courses
                 </p>
                 <div className='flex flex-col sm:flex-row items-center gap-8'>
-                  {/* Progress Circle */}
-                  <div className='relative w-32 h-32 shrink-0'>
-                    <svg
-                      className='w-full h-full transform -rotate-90'
-                      viewBox='0 0 36 36'
-                    >
-                      <circle
-                        className='text-slate-100'
-                        strokeWidth='3'
-                        stroke='currentColor'
-                        fill='none'
-                        r='16'
-                        cx='18'
-                        cy='18'
-                      />
-                      <circle
-                        className='text-purple-600'
-                        strokeWidth='3'
-                        strokeDasharray='100'
-                        strokeDashoffset='15'
-                        strokeLinecap='round'
-                        stroke='currentColor'
-                        fill='none'
-                        r='16'
-                        cx='18'
-                        cy='18'
-                      />
-                    </svg>
-                    <div className='absolute inset-0 flex flex-col items-center justify-center'>
-                      <span className='text-2xl font-bold text-slate-900'>
-                        85%
-                      </span>
-                      <span className='text-xs text-slate-500 font-medium'>
-                        Complete
-                      </span>
-                    </div>
+                  {/* Progress Circle (Recharts) */}
+                  <div className='w-40 h-40 shrink-0'>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={60}
+                            paddingAngle={5}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className='text-center -mt-24 pointer-events-none relative z-10'>
+                          <span className='block text-xl font-bold text-slate-900'>{assignmentStats.completionRate}%</span>
+                      </div>
                   </div>
+                  
                   {/* Legend */}
                   <div className='flex-1 flex flex-col gap-3 text-sm w-full'>
                     <div className='flex items-center gap-3'>
                       <span className='w-2.5 h-2.5 rounded-full bg-purple-600' />
                       <span className='font-medium text-slate-700'>
-                        Completed: 120
+                        Completed: {assignmentStats.completed}
                       </span>
                     </div>
                     <div className='flex items-center gap-3'>
                       <span className='w-2.5 h-2.5 rounded-full bg-amber-400' />
                       <span className='font-medium text-slate-700'>
-                        In Progress: 15
+                        In Progress: {assignmentStats.pending}
                       </span>
                     </div>
                     <div className='flex items-center gap-3'>
                       <span className='w-2.5 h-2.5 rounded-full bg-red-500' />
                       <span className='font-medium text-slate-700'>
-                        Overdue: 6
+                        Overdue: {assignmentStats.overdue}
                       </span>
                     </div>
                   </div>
@@ -464,7 +515,7 @@ export function TeacherDashboard() {
                     Active Tasks
                   </p>
                   <p className='text-2xl font-bold text-slate-900 mt-1'>
-                    {assignments.length}
+                    {upcomingDeadlines.length}
                   </p>
                 </CardContent>
               </Card>

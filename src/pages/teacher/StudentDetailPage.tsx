@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -8,42 +8,168 @@ import {
   MapPin,
   CheckCircle,
   Clock,
-  FileText,
   Mic,
+  FileText,
   BookOpen,
   ArrowRight,
+  TrendingUp,
+  Loader2,
+  AlertTriangle,
+  Brain
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants";
+import { userApi } from "@/services/api/users";
+import { attemptApi } from "@/services/api/attempts";
 import {
-  mockStudents,
-  mockClasses,
-  mockAssignments,
-  mockSubmissions,
-  type TaskType,
-  type SubmissionStatus,
-  type Submission,
-} from "@/data";
-
-type TaskFilter = "ALL" | "WRITING" | "SPEAKING";
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Legend
+} from "recharts";
 
 export function StudentDetailPage() {
   const navigate = useNavigate();
   const { studentId } = useParams<{ studentId: string }>();
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("ALL");
+  const [student, setStudent] = useState<any>(null);
+  const [attempts, setAttempts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [taskFilter, setTaskFilter] = useState<"ALL" | "WRITING" | "SPEAKING">("ALL");
+  const [stats, setStats] = useState({
+      avgScore: "0.0",
+      totalCompleted: 0,
+      writingAvg: "0.0",
+      speakingAvg: "0.0"
+  });
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [skillData, setSkillData] = useState<any[]>([]);
 
-  // Find student
-  const student = mockStudents.find((s) => s.id === studentId);
+  useEffect(() => {
+    const fetchStudentData = async () => {
+      if (!studentId) return;
+      try {
+        setLoading(true);
+        // Parallel fetching
+        const [learnersRes, attemptsRes] = await Promise.all([
+             userApi.getLearners(), // In future, use getUserById if available
+             attemptApi.getAttemptsByLearner(studentId)
+        ]);
+
+        const foundStudent = learnersRes.data?.find((u: any) => u.id === studentId);
+        setStudent(foundStudent || null);
+
+        const allAttempts = attemptsRes.data || [];
+        setAttempts(allAttempts);
+
+        // Process Stats
+        const scoredAttempts = allAttempts.filter((a: any) =>
+            (a.status === 'SCORED' || a.status === 'SUBMITTED') && a.score?.overallBand
+        ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const totalScore = scoredAttempts.reduce((sum: number, a: any) => sum + Number(a.score.overallBand || 0), 0);
+        const overallAvg = scoredAttempts.length ? (totalScore / scoredAttempts.length).toFixed(1) : "0.0";
+
+        const writingAttempts = scoredAttempts.filter((a: any) => a.type === 'WRITING' || a.skillType === 'WRITING'); // Check backend field
+        const speakingAttempts = scoredAttempts.filter((a: any) => a.type === 'SPEAKING' || a.skillType === 'SPEAKING');
+
+        const wScore = writingAttempts.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0);
+        const sScore = speakingAttempts.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0);
+
+        setStats({
+            avgScore: overallAvg,
+            totalCompleted: scoredAttempts.length,
+            writingAvg: writingAttempts.length ? (wScore / writingAttempts.length).toFixed(1) : "N/A",
+            speakingAvg: speakingAttempts.length ? (sScore / speakingAttempts.length).toFixed(1) : "N/A"
+        });
+
+        // Chart Data
+        const chart = scoredAttempts.map((a: any) => ({
+             date: new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+             score: Number(a.score.overallBand) || 0,
+             title: a.title
+        }));
+        setChartData(chart);
+
+        // Skill Radar Data (Similar logic to ProgressPage)
+         const skillAgg = {
+             fluency: 0, pronunciation: 0, lexical: 0, grammar: 0, coherence: 0, count: 0
+         };
+
+         scoredAttempts.forEach((a: any) => {
+             const base = Number(a.score.overallBand) || 6.0;
+             skillAgg.fluency += (a.score.fluency || base);
+             skillAgg.pronunciation += (a.score.pronunciation || base);
+             skillAgg.lexical += (a.score.lexical || base);
+             skillAgg.grammar += (a.score.grammar || base);
+             skillAgg.count++;
+         });
+         
+         if (skillAgg.count > 0) {
+            setSkillData([
+                { subject: 'Fluency', A: (skillAgg.fluency / skillAgg.count).toFixed(1), fullMark: 9 },
+                { subject: 'Pronunciation', A: (skillAgg.pronunciation / skillAgg.count).toFixed(1), fullMark: 9 },
+                { subject: 'Lexical', A: (skillAgg.lexical / skillAgg.count).toFixed(1), fullMark: 9 },
+                { subject: 'Grammar', A: (skillAgg.grammar / skillAgg.count).toFixed(1), fullMark: 9 },
+            ]);
+        } else {
+             // DefaultEmpty
+             setSkillData([
+                { subject: 'Fluency', A: 0, fullMark: 9 },
+                { subject: 'Pronunciation', A: 0, fullMark: 9 },
+                { subject: 'Lexical', A: 0, fullMark: 9 },
+                { subject: 'Grammar', A: 0, fullMark: 9 },
+            ]);
+        }
+
+
+      } catch (err) {
+        console.error("Failed to fetch student details", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentData();
+  }, [studentId]);
+
+  const getTaskIcon = (type?: string) => {
+    if (type === "WRITING") return <FileText size={20} />;
+    if (type === "SPEAKING") return <Mic size={20} />;
+    return <BookOpen size={20} />;
+  };
+
+  const getTaskColorClass = (type?: string) => {
+    if (type === "WRITING") return "bg-blue-50 text-blue-600 border-blue-100";
+    if (type === "SPEAKING") return "bg-purple-50 text-purple-600 border-purple-100";
+    return "bg-green-50 text-green-600 border-green-100";
+  };
+
+  const handleBack = () => {
+    navigate(ROUTES.TEACHER.STUDENTS);
+  };
+
+  if (loading) {
+      return (
+          <div className="flex h-screen items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+          </div>
+      );
+  }
 
   if (!student) {
     return (
       <div className='flex flex-col items-center justify-center py-12'>
         <p className='text-slate-500'>Student not found</p>
-        <Button
-          variant='ghost'
-          onClick={() => navigate(ROUTES.TEACHER.STUDENTS)}
-          className='mt-4'
-        >
+        <Button variant='ghost' onClick={handleBack} className='mt-4'>
           <ArrowLeft size={16} className='mr-2' />
           Back to Student List
         </Button>
@@ -51,70 +177,11 @@ export function StudentDetailPage() {
     );
   }
 
-  // Get student's submissions
-  const submissions = mockSubmissions.filter((s) => s.studentId === student.id);
-
-  // Identify Student Classes
-  const enrolledClassIds = mockClasses
-    .filter((c) => c.studentIds.includes(student.id))
-    .map((c) => c.id);
-
-  // Identify All Assigned Tasks for those classes
-  const allStudentAssignments = mockAssignments.filter((a) =>
-    enrolledClassIds.includes(a.classId)
-  );
-
-  // Filter assignments based on selected task type
-  const studentAssignments =
-    taskFilter === "ALL"
-      ? allStudentAssignments
-      : allStudentAssignments.filter((a) => a.type === taskFilter);
-
-  // Stats Calculation
-  const gradedSubmissions = submissions.filter((s) => s.status === "GRADED");
-
-  const getAverage = (subs: Submission[]) => {
-    if (subs.length === 0) return 0;
-    const sum = subs.reduce(
-      (acc, curr) => acc + (curr.aiFeedback?.score || 0),
-      0
-    );
-    return (sum / subs.length).toFixed(1);
-  };
-
-  const overallScore =
-    gradedSubmissions.length > 0 ? getAverage(gradedSubmissions) : "N/A";
-
-  // Calculate average by type
-  const writingGraded = gradedSubmissions.filter((s) => {
-    const a = mockAssignments.find((assign) => assign.id === s.assignmentId);
-    return a?.type === "WRITING";
+  // Filter logic for table
+  const filteredAttempts = attempts.filter((a) => {
+      if (taskFilter === "ALL") return true;
+      return a.skillType === taskFilter || a.type === taskFilter;
   });
-  const speakingGraded = gradedSubmissions.filter((s) => {
-    const a = mockAssignments.find((assign) => assign.id === s.assignmentId);
-    return a?.type === "SPEAKING";
-  });
-
-  const writingScore = getAverage(writingGraded);
-  const speakingScore = getAverage(speakingGraded);
-  const readingScore = "6.5"; // Mock
-
-  const getTaskIcon = (type?: TaskType) => {
-    if (type === "WRITING") return <FileText size={20} />;
-    if (type === "SPEAKING") return <Mic size={20} />;
-    return <BookOpen size={20} />;
-  };
-
-  const getTaskColorClass = (type?: TaskType) => {
-    if (type === "WRITING") return "bg-blue-50 text-blue-600 border-blue-100";
-    if (type === "SPEAKING")
-      return "bg-purple-50 text-purple-600 border-purple-100";
-    return "bg-green-50 text-green-600 border-green-100";
-  };
-
-  const handleBack = () => {
-    navigate(ROUTES.TEACHER.STUDENTS);
-  };
 
   return (
     <div className='flex flex-col gap-6 animate-in slide-in-from-right duration-300 pb-12'>
@@ -128,9 +195,11 @@ export function StudentDetailPage() {
             <ArrowLeft size={16} />
             Back to Learner List
           </button>
-          <h1 className='text-3xl font-bold text-slate-900'>{student.name}</h1>
+          <h1 className='text-3xl font-bold text-slate-900'>
+              {student.firstName && student.lastName ? `${student.firstName} ${student.lastName}` : (student.name || student.email.split('@')[0])}
+          </h1>
           <p className='text-base text-slate-500'>
-            Student ID: #{student.id.toUpperCase()} • Joined Jan 2024
+            {student.email} • ID: #{student.id.slice(-6).toUpperCase()}
           </p>
         </div>
         <div className='flex items-center gap-3'>
@@ -152,150 +221,117 @@ export function StudentDetailPage() {
           {/* Profile Card */}
           <div className='bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm'>
             <div className='p-6 flex flex-col items-center border-b border-slate-100'>
-              {student.avatar ? (
-                <img
-                  className='w-24 h-24 rounded-full mb-4 object-cover ring-4 ring-slate-50'
-                  src={student.avatar}
-                  alt={student.name}
-                />
-              ) : (
-                <div className='w-24 h-24 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-3xl mb-4 ring-4 ring-slate-50'>
-                  {student.name[0]}
-                </div>
-              )}
-              <h2 className='text-xl font-bold text-slate-900'>
-                {student.name}
-              </h2>
-              <p className='text-sm text-slate-500'>{student.email}</p>
-            </div>
-            <div className='p-6 space-y-4'>
-              <div>
-                <label className='text-xs font-semibold text-slate-400 uppercase tracking-wider'>
-                  Contact
-                </label>
-                <div className='flex items-center gap-2 mt-1 text-slate-700'>
-                  <Phone size={16} className='text-slate-400' />
-                  <span>+84 912 345 678</span>
-                </div>
-                <div className='flex items-center gap-2 mt-1 text-slate-700'>
-                  <MapPin size={16} className='text-slate-400' />
-                  <span>Ho Chi Minh City, Vietnam</span>
-                </div>
-              </div>
-              <div>
-                <label className='text-xs font-semibold text-slate-400 uppercase tracking-wider'>
-                  Enrolled Course
-                </label>
-                <div className='mt-2 p-3 bg-slate-50 rounded-lg border border-slate-100'>
-                  <p className='font-medium text-slate-900 text-sm'>
-                    {mockClasses
-                      .filter((c) => c.studentIds.includes(student.id))
-                      .map((c) => c.name)
-                      .join(", ") || "No Course"}
-                  </p>
-                  <div className='flex items-center gap-2 mt-2'>
-                    <div className='w-full bg-slate-200 rounded-full h-1.5'>
-                      <div
-                        className='bg-teal-400 h-1.5 rounded-full'
-                        style={{ width: "65%" }}
-                      />
+                {student.avatar ? (
+                     <img className='w-24 h-24 rounded-full mb-4 object-cover ring-4 ring-slate-50' src={student.avatar} alt="Avatar" />
+                ) : (
+                    <div className='w-24 h-24 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-3xl mb-4 ring-4 ring-slate-50'>
+                    {(student.firstName?.[0] || student.name?.[0] || student.email[0]).toUpperCase()}
                     </div>
-                    <span className='text-xs font-medium text-slate-600'>
-                      65%
-                    </span>
-                  </div>
+                )}
+              <h2 className='text-xl font-bold text-slate-900'>
+                {student.firstName || student.name || "Student"}
+              </h2>
+              <p className='text-sm text-slate-500'>Learner</p>
+            </div>
+            
+             <div className='p-6 space-y-4'>
+                 {/* Quick Score Summary */}
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <span className="text-sm font-medium text-slate-600">Current Band</span>
+                    <span className="text-xl font-bold text-purple-600">{stats.avgScore}</span>
                 </div>
-              </div>
+                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <span className="text-sm font-medium text-slate-600">Completed Tasks</span>
+                    <span className="text-xl font-bold text-slate-900">{stats.totalCompleted}</span>
+                 </div>
             </div>
           </div>
 
-          {/* Performance Summary */}
+          {/* Performance Summary (Detailed) */}
           <div className='bg-white rounded-xl border border-slate-200 p-6 shadow-sm'>
             <h3 className='text-lg font-bold text-slate-900 mb-4'>
               Performance Summary
             </h3>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-sm text-slate-600'>Current Band Score</span>
-              <span className='text-2xl font-bold text-purple-600'>
-                {overallScore}
-              </span>
-            </div>
-            <p className='text-xs text-slate-500 mb-6'>
-              Based on {gradedSubmissions.length} graded tasks
-            </p>
-
+            
             <div className='space-y-4'>
-              {/* Writing */}
               <div>
                 <div className='flex items-center justify-between text-sm mb-1'>
                   <span className='flex items-center gap-2 text-slate-700'>
                     <span className='w-2 h-2 bg-blue-500 rounded-full' />
                     Writing
                   </span>
-                  <span className='font-medium text-slate-900'>
-                    {writingScore || "-"}
-                  </span>
+                  <span className='font-medium text-slate-900'>{stats.writingAvg}</span>
                 </div>
-                <div className='w-full bg-slate-100 rounded-full h-1.5'>
-                  <div
-                    className='bg-blue-500 h-1.5 rounded-full'
-                    style={{ width: `${(Number(writingScore) / 9) * 100}%` }}
-                  />
+                 <div className='w-full bg-slate-100 rounded-full h-1.5'>
+                  <div className='bg-blue-500 h-1.5 rounded-full' style={{ width: `${(Number(stats.writingAvg === "N/A" ? 0 : stats.writingAvg) / 9) * 100}%` }} />
                 </div>
               </div>
 
-              {/* Speaking */}
               <div>
                 <div className='flex items-center justify-between text-sm mb-1'>
                   <span className='flex items-center gap-2 text-slate-700'>
                     <span className='w-2 h-2 bg-purple-500 rounded-full' />
                     Speaking
                   </span>
-                  <span className='font-medium text-slate-900'>
-                    {speakingScore || "-"}
-                  </span>
+                  <span className='font-medium text-slate-900'>{stats.speakingAvg}</span>
                 </div>
                 <div className='w-full bg-slate-100 rounded-full h-1.5'>
-                  <div
-                    className='bg-purple-500 h-1.5 rounded-full'
-                    style={{ width: `${(Number(speakingScore) / 9) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Reading (Mock) */}
-              <div>
-                <div className='flex items-center justify-between text-sm mb-1'>
-                  <span className='flex items-center gap-2 text-slate-700'>
-                    <span className='w-2 h-2 bg-green-500 rounded-full' />
-                    Reading
-                  </span>
-                  <span className='font-medium text-slate-900'>
-                    {readingScore}
-                  </span>
-                </div>
-                <div className='w-full bg-slate-100 rounded-full h-1.5'>
-                  <div
-                    className='bg-green-500 h-1.5 rounded-full'
-                    style={{ width: `${(Number(readingScore) / 9) * 100}%` }}
-                  />
+                  <div className='bg-purple-500 h-1.5 rounded-full' style={{ width: `${(Number(stats.speakingAvg === "N/A" ? 0 : stats.speakingAvg) / 9) * 100}%` }} />
                 </div>
               </div>
             </div>
           </div>
+
+           {/* Skills Radar */}
+           <div className='bg-white rounded-xl border border-slate-200 p-4 shadow-sm min-h-[300px] flex flex-col'>
+             <h3 className='text-sm font-bold text-slate-900 mb-2 flex items-center gap-2'>
+                <Brain size={16} className="text-purple-600"/>
+                Skill Analysis
+             </h3>
+             <div className="flex-1 w-full flex items-center justify-center -ml-4">
+                 <ResponsiveContainer width="100%" height={250}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={skillData}>
+                        <PolarGrid stroke="#E2E8F0" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 9]} tickCount={4} tick={false} />
+                        <Radar name="Student" dataKey="A" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} />
+                    </RadarChart>
+                 </ResponsiveContainer>
+             </div>
+           </div>
+
         </div>
 
-        {/* Right Main: Task List */}
-        <div className='lg:col-span-8'>
-          <div className='bg-white rounded-xl border border-slate-200 h-full flex flex-col shadow-sm'>
+        {/* Right Main: Charts & Task List */}
+        <div className='lg:col-span-8 flex flex-col gap-6'>
+          
+           {/* Trend Chart */}
+           <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[350px]'>
+             <div className='flex justify-between items-center mb-6'>
+                <h3 className='text-lg font-bold text-slate-900'>Score Progression</h3>
+             </div>
+             <div className="flex-1 w-full h-full">
+                <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="date" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis domain={[0, 9]} ticks={[0, 2, 4, 6, 8]} stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E2E8F0' }}
+                        />
+                        <Line type="monotone" dataKey="score" stroke="#7C3AED" strokeWidth={3} activeDot={{ r: 6 }} dot={{ r: 3 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+             </div>
+           </div>
+
+          {/* Task History Table */}
+          <div className='bg-white rounded-xl border border-slate-200 h-full flex flex-col shadow-sm overflow-hidden'>
             <div className='p-6 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between'>
               <div>
                 <h3 className='text-lg font-bold text-slate-900'>
                   Task History
                 </h3>
-                <p className='text-sm text-slate-500 mt-1'>
-                  All assignments and their current status.
-                </p>
               </div>
               <div className='flex bg-slate-100 p-1 rounded-lg'>
                 <button
@@ -336,139 +372,68 @@ export function StudentDetailPage() {
                 <thead className='text-xs text-slate-700 uppercase bg-slate-50'>
                   <tr>
                     <th className='px-6 py-3 font-medium'>Task Detail</th>
-                    <th className='px-6 py-3 font-medium'>Due Date</th>
-                    <th className='px-6 py-3 font-medium text-center'>Score</th>
                     <th className='px-6 py-3 font-medium'>Status</th>
+                    <th className='px-6 py-3 font-medium text-center'>Score</th>
                     <th className='px-6 py-3 font-medium text-right'>Action</th>
                   </tr>
                 </thead>
                 <tbody className='divide-y divide-slate-200'>
-                  {studentAssignments.length === 0 ? (
+                  {filteredAttempts.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className='text-center py-8 text-slate-400 italic'
-                      >
-                        {taskFilter === "ALL"
-                          ? "No tasks assigned yet."
-                          : `No ${taskFilter.toLowerCase()} tasks found.`}
+                      <td colSpan={4} className='text-center py-8 text-slate-400 italic'>
+                         No history found.
                       </td>
                     </tr>
                   ) : (
-                    studentAssignments.map((assignment) => {
-                      const sub = submissions.find(
-                        (s) => s.assignmentId === assignment.id
-                      );
-                      const status: SubmissionStatus =
-                        sub?.status || "NOT_STARTED";
-
-                      return (
-                        <tr
-                          key={assignment.id}
-                          className='hover:bg-slate-50 transition-colors'
-                        >
+                    filteredAttempts.map((attempt) => (
+                        <tr key={attempt.id} className='hover:bg-slate-50 transition-colors'>
                           <td className='px-6 py-4'>
                             <div className='flex items-start gap-3'>
-                              <div
-                                className={`p-2 rounded-lg border ${getTaskColorClass(
-                                  assignment.type
-                                )}`}
-                              >
-                                {getTaskIcon(assignment.type)}
+                              <div className={`p-2 rounded-lg border ${getTaskColorClass(attempt.skillType || attempt.type)}`}>
+                                {getTaskIcon(attempt.skillType || attempt.type)}
                               </div>
                               <div className='max-w-[180px]'>
-                                <p
-                                  className='font-medium text-slate-900 truncate'
-                                  title={assignment.title}
-                                >
-                                  {assignment.title}
+                                <p className='font-medium text-slate-900 truncate' title={attempt.title || attempt.assignment?.title}>
+                                  {attempt.title || attempt.assignment?.title || "Untitled Task"}
                                 </p>
                                 <p className='text-xs text-slate-500 truncate'>
-                                  {assignment.type} Task
+                                  {new Date(attempt.createdAt).toLocaleDateString()}
                                 </p>
                               </div>
                             </div>
                           </td>
-                          <td className='px-6 py-4 whitespace-nowrap'>
-                            {new Date(assignment.dueDate).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              }
-                            )}
+                          <td className='px-6 py-4'>
+                             {attempt.status === 'SCORED' ? (
+                                 <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs font-medium">
+                                     <CheckCircle size={14} /> Scored
+                                 </span>
+                             ) : attempt.status === 'SUBMITTED' ? (
+                                 <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-full text-xs font-medium">
+                                     <Clock size={14} /> Submitted
+                                 </span>
+                             ) : (
+                                  <span className="inline-flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded-full text-xs font-medium">
+                                     In Progress
+                                 </span>
+                             )}
                           </td>
                           <td className='px-6 py-4 text-center'>
-                            {sub?.aiFeedback?.score ? (
-                              <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200'>
-                                {sub.aiFeedback.score}
-                              </span>
+                            {attempt.score?.overallBand ? (
+                                <span className='font-bold text-slate-900'>{attempt.score.overallBand}</span>
                             ) : (
-                              <span className='text-slate-400 text-xs'>-</span>
-                            )}
-                          </td>
-                          <td className='px-6 py-4'>
-                            {status === "GRADED" ? (
-                              <div className='flex items-center gap-1.5'>
-                                <CheckCircle
-                                  size={16}
-                                  className='text-green-500'
-                                />
-                                <span className='text-slate-700 text-xs'>
-                                  Graded
-                                </span>
-                              </div>
-                            ) : status === "SUBMITTED" ? (
-                              <div className='flex items-center gap-1.5'>
-                                <Clock size={16} className='text-amber-500' />
-                                <span className='text-slate-700 text-xs'>
-                                  Submitted
-                                </span>
-                              </div>
-                            ) : status === "PENDING" ? (
-                              <div className='flex items-center gap-1.5'>
-                                <Clock size={16} className='text-slate-400' />
-                                <span className='text-slate-700 text-xs'>
-                                  Draft
-                                </span>
-                              </div>
-                            ) : (
-                              <div className='flex items-center gap-1.5'>
-                                <div className='w-4 h-4 rounded-full border border-slate-300' />
-                                <span className='text-slate-400 text-xs'>
-                                  Not Started
-                                </span>
-                              </div>
+                                <span className='text-slate-400'>-</span>
                             )}
                           </td>
                           <td className='px-6 py-4 text-right'>
-                            {sub ? (
-                              <button className='text-purple-600 hover:text-purple-700 font-medium text-xs flex items-center justify-end gap-1 w-full group'>
-                                View Details{" "}
-                                <ArrowRight
-                                  size={14}
-                                  className='group-hover:translate-x-0.5 transition-transform'
-                                />
-                              </button>
-                            ) : (
-                              <span className='text-slate-300 text-xs'>
-                                No Data
-                              </span>
-                            )}
+                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => window.location.href = `/teacher/grading/${attempt.id}`}>
+                                <ArrowRight size={16} className="text-purple-600"/>
+                             </Button>
                           </td>
                         </tr>
-                      );
-                    })
+                    ))
                   )}
                 </tbody>
               </table>
-            </div>
-
-            <div className='p-4 border-t border-slate-200 flex justify-center'>
-              <button className='text-sm text-slate-500 hover:text-slate-900 font-medium transition-colors'>
-                Load more history
-              </button>
             </div>
           </div>
         </div>
