@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import {
   TrendingUp,
   ClipboardCheck,
@@ -27,9 +28,11 @@ import {
 import { attemptApi } from "@/services/api/attempts";
 import { useAuthStore } from "@/stores";
 import { Button } from "@/components/ui/button";
+import { type AttemptList } from "@/types";
 
 export function ProgressPage() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     averageScore: 0,
@@ -39,30 +42,35 @@ export function ProgressPage() {
     projectedScore: 0
   });
   const [chartData, setChartData] = useState<any[]>([]);
-  const [recentAttempts, setRecentAttempts] = useState<any[]>([]);
+  const [recentAttempts, setRecentAttempts] = useState<AttemptList[]>([]);
   const [skillData, setSkillData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+          // If user is not loaded yet, we can't fetch. 
+          // But if auth is done and no user, we shouldn't be here (protected route).
+          // If auth is loading, we wait.
+          return; 
+      }
       try {
         const response = await attemptApi.getAttemptsByLearner(user.id);
         const attempts = response.data || [];
 
         // Process data for charts and stats
-        const scoredAttempts = attempts.filter((a: any) => 
-            (a.status === 'SCORED' || a.status === 'SUBMITTED') && a.score
-        ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const scoredAttempts: AttemptList[] = attempts.filter((a: AttemptList) => 
+            (a.status === 'scored' || a.status === 'submitted') && a.score
+        ).sort((a: AttemptList, b: AttemptList) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         // Calculate Stats
-        const totalScore = scoredAttempts.reduce((sum: number, a: any) => sum + (Number(a.score.overallBand) || 0), 0);
+        const totalScore = scoredAttempts.reduce((sum: number, a: AttemptList) => sum + (Number(a.score?.overallBand) || 0), 0);
         const avgScore = scoredAttempts.length > 0 ? (totalScore / scoredAttempts.length) : 0;
         
         // Calculate Trend (vs last 3 attempts)
         const last3 = scoredAttempts.slice(-3);
         const prev3 = scoredAttempts.slice(-6, -3);
-        const last3Avg = last3.length ? last3.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0) / last3.length : 0;
-        const prev3Avg = prev3.length ? prev3.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0) / prev3.length : 0;
+        const last3Avg = last3.length ? last3.reduce((s: number, a: AttemptList) => s + Number(a.score?.overallBand || 0), 0) / last3.length : 0;
+        const prev3Avg = prev3.length ? prev3.reduce((s: number, a: AttemptList) => s + Number(a.score?.overallBand || 0), 0) / prev3.length : 0;
         const trend = last3Avg - prev3Avg;
 
         setStats({
@@ -73,10 +81,11 @@ export function ProgressPage() {
             projectedScore: Math.min(9.0, Number((avgScore + (trend > 0 ? 0.5 : 0)).toFixed(1))) // Simple projection
         });
 
+
         // Chart Data
-        const chart = scoredAttempts.map((a: any) => ({
+        const chart = scoredAttempts.map((a: AttemptList) => ({
             date: new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-            score: Number(a.score.overallBand) || 0,
+            score: Number(a.score?.overallBand) || 0,
             fullDate: new Date(a.createdAt).toLocaleDateString()
         }));
         setChartData(chart);
@@ -87,10 +96,11 @@ export function ProgressPage() {
             fluency: 0, pronunciation: 0, lexical: 0, grammar: 0, coherence: 0, count: 0
         };
         
-        scoredAttempts.forEach((a: any) => {
+        scoredAttempts.forEach((a: AttemptList) => {
              // Mock extraction if detailed scores aren't in the list view (they might be in detail view only)
              // Assuming list view has basic core. checking logic..
              // If data isn't deep enough, we use overall or mock distribution centered around overall
+             if (!a.score) return;
              const base = Number(a.score.overallBand) || 6.0;
              skillAgg.fluency += (a.score.fluency || base);
              skillAgg.pronunciation += (a.score.pronunciation || base);
@@ -326,7 +336,7 @@ export function ProgressPage() {
                             </span>
                         </td>
                         <td className='py-3 px-2 text-right'>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-purple-600" onClick={() => window.location.href = `/learner/report/${attempt.id}`}>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-purple-600 hover:bg-purple-50 hover:text-purple-700" onClick={() => navigate(`/learner/report/${attempt.id}`)}>
                                 <Eye size={18} />
                             </Button>
                         </td>

@@ -165,6 +165,21 @@ export function SpeakingGradingPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Column 1: Student Response (Speaking specific) */}
         <div className="xl:col-span-1 space-y-6">
+          
+          {/* Task Description Card */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5">
+               <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                   <FileText className="w-4 h-4 text-slate-500" />
+                   Task Description
+               </CardTitle>
+            </CardHeader>
+             <CardContent className="pt-6">
+                 <div className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
+                      {attempt.assignmentDescription || "No task description provided."}
+                 </div>
+             </CardContent>
+          </Card>
             
           {/* Audio Player Card */}
           <Card className="border-slate-200 shadow-sm overflow-hidden">
@@ -284,34 +299,17 @@ export function SpeakingGradingPage() {
             </CardHeader>
              <CardContent className="pt-0">
                  <div className="max-h-[400px] overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-                     {attempt.content ? (
-                         <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed">
-                            {/* Mocking transcript formatting */}
-                             <p>
-                                 <span className="font-mono text-[10px] text-purple-400 mr-2">[00:00]</span>
-                                 "Well, I think that technology has changed our lives in many ways. <span className="bg-yellow-100 px-1 rounded border-b-2 border-yellow-200 text-yellow-800">Firstly</span>, it allows us to communicate with people from all over the world instantly. In the past, we had to wait for letters, but now it's just a <span className="text-purple-600 bg-purple-50 px-1 rounded">click away</span>."
-                             </p>
-                             <p>
-                                 <span className="font-mono text-[10px] text-purple-400 mr-2">[00:45]</span>
-                                 "Regarding my hometown, I would say it's a <span className="bg-red-50 text-red-700 border-b border-red-300">very big city</span>. There are lots of people and cars, which makes it noisy. However, I like the vibe there because there's always something to do at night."
-                             </p>
-                             <p className="italic text-slate-400 text-xs py-2">
-                                 [Student pauses for 3 seconds]
-                             </p>
-                             <p>
-                                <span className="font-mono text-[10px] text-purple-400 mr-2">[01:22]</span>
-                                "To conclude, I believe that technology will continue to evolve and <span className="border-b-2 border-purple-500 text-slate-900 font-medium">reshape</span> our daily routines in the coming decade."
-                             </p>
-                             
-                             {/* Actual content fallback if we want to show it real */}
-                             <div className="mt-8 pt-8 border-t border-slate-200">
-                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Raw Content</h4>
-                                 <p className="whitespace-pre-wrap">{attempt.content}</p>
+                      {attempt.score?.detailedFeedback?.transcript ? (
+                          <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed whitespace-pre-wrap">
+                              {attempt.score.detailedFeedback.transcript}
+                          </div>
+                      ) : attempt.content && !attempt.content.startsWith("http") ? (
+                             <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                 {attempt.content}
                              </div>
-                         </div>
-                     ) : (
-                         <div className="text-center py-12 text-slate-400 italic">No transcription available.</div>
-                     )}
+                      ) : (
+                          <div className="text-center py-12 text-slate-400 italic">No transcription available.</div>
+                      )}
                  </div>
              </CardContent>
           </Card>
@@ -333,40 +331,55 @@ export function SpeakingGradingPage() {
                     <div className="bg-purple-50 rounded-xl p-5 border border-purple-100 flex items-center justify-between">
                         <div>
                             <div className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Estimated Band</div>
-                            <div className="text-4xl font-black text-purple-700 leading-none">6.5</div>
+                            <div className="text-4xl font-black text-purple-700 leading-none">{attempt.score?.detailedFeedback?.overallBand || attempt.score?.overallBand || "N/A"}</div>
                         </div>
                         <div className="text-right space-y-1">
                             <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Fluency:</span> <span className="font-bold text-slate-900">6.0</span>
+                                <span>Fluency:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.fluency || attempt.score?.fluency || "-"}</span>
                             </div>
                             <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Pronunciation:</span> <span className="font-bold text-slate-900">7.0</span>
+                                <span>Pronunciation:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.pronunciation || attempt.score?.pronunciation || "-"}</span>
+                            </div>
+                             <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                <span>Lexical:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.lexical || attempt.score?.lexical || "-"}</span>
+                            </div>
+                             <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                <span>Grammar:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.grammar || attempt.score?.grammar || "-"}</span>
                             </div>
                         </div>
                     </div>
+                     
+                     {/* Strengths */}
                      <div className="space-y-3">
                         <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
                             <CheckCircle2 className="w-4 h-4 text-green-600" />
                             Strengths
                         </h4>
-                        <ul className="space-y-2">
-                            <li className="text-sm text-slate-600 flex items-start gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 shrink-0" />
-                                <span>Good use of connectors ("Firstly", "However").</span>
-                            </li>
-                        </ul>
+                        <div className="text-sm text-slate-600 bg-green-50/50 p-3 rounded-md border border-green-100">
+                             {attempt.score?.detailedFeedback?.strengths || "No specific strengths analysis available."}
+                        </div>
                     </div>
+                     
+                     {/* Areas for Improvement */}
                      <div className="space-y-3">
                         <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
                             <AlertCircle className="w-4 h-4 text-amber-500" />
                             Areas for Improvement
                         </h4>
-                         <ul className="space-y-2">
-                            <li className="text-sm text-slate-600 flex items-start gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                                <span>Some pauses affecting fluency.</span>
-                            </li>
-                        </ul>
+                         <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded-md border border-amber-100">
+                             {attempt.score?.detailedFeedback?.issues || "No specific issues analysis available."}
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                     <div className="space-y-3">
+                        <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                             <Sparkles className="w-4 h-4 text-purple-500" />
+                            Recommended Actions
+                        </h4>
+                         <div className="text-sm text-slate-600 bg-purple-50/50 p-3 rounded-md border border-purple-100 italic">
+                             {attempt.score?.detailedFeedback?.actions || "No specific actions available."}
+                        </div>
                     </div>
                 </CardContent>
             </Card>

@@ -22,10 +22,11 @@ import {
   TeacherProfilePage,
   GradingPage,
   SpeakingGradingPage,
+  WritingGradedTaskPage,
 } from "@/pages/teacher";
 
 // Student pages
-import { StudentDashboard, ProgressPage, ProfilePage as StudentProfilePage, ReportDetailPage, WritingSubmissionPage, SpeakingSubmissionPage } from "@/pages/student";
+import { StudentDashboard, ProgressPage, ProfilePage as StudentProfilePage, ReportDetailPage, WritingSubmissionPage, SpeakingSubmissionPage, SpeakingEvaluationPage, WritingEvaluationPage } from "@/pages/student";
 
 // Route constants
 import { ROUTES } from "@/constants";
@@ -74,6 +75,7 @@ function App() {
             <Route path="profile" element={<TeacherProfilePage />} />
             <Route path="grading/:attemptId" element={<GradingPage />} />
             <Route path="grading/speaking/:attemptId" element={<SpeakingGradingPage />} />
+            <Route path="graded/:attemptId" element={<WritingGradedTaskPage />} />
             {/* Add more teacher routes here:
             <Route path="settings" element={<TeacherSettings />} />
             */}
@@ -94,6 +96,8 @@ function App() {
             <Route path="report/:submissionId" element={<ReportDetailPage />} />
             <Route path="submit/writing/:assignmentId" element={<WritingSubmissionPage />} />
             <Route path="submit/speaking/:assignmentId" element={<SpeakingSubmissionPage />} />
+            <Route path="speaking-evaluation/:assignmentId" element={<SpeakingEvaluationPage />} />
+            <Route path="writing-evaluation/:assignmentId" element={<WritingEvaluationPage />} />
             {/* Add more student routes here:
             <Route path="courses" element={<StudentCourses />} />
             <Route path="courses/:id" element={<StudentCourseDetail />} />

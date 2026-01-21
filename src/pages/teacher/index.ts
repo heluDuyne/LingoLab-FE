@@ -11,4 +11,6 @@ export { GradingPage } from "./GradingPage";
 
 // Add more teacher page exports as you create them:
 // export { TeacherSettings } from './TeacherSettings';
-export { SpeakingGradingPage } from "./SpeakingGradingPage";
+export * from "./GradingPage";
+export * from "./SpeakingGradingPage";
+export * from "./WritingGradedTaskPage";

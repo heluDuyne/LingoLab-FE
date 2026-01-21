@@ -8,7 +8,7 @@ import { BadgeStatus } from "@/components/ui/badge-status";
 import { Clock } from "lucide-react";
 
 // Types
-type TaskFilter = "ALL" | "TODO" | "SUBMITTED";
+type TaskFilter = "ALL" | "TODO" | "SUBMITTED" | "SCORED";
 
 export function StudentDashboard() {
   const navigate = useNavigate();
@@ -44,7 +44,8 @@ export function StudentDashboard() {
   // Filter assignments based on selected tab
   const filteredAssignments = assignments.filter((assignment) => {
     if (taskFilter === "TODO") return !assignment.submissionStatus || assignment.submissionStatus === "PENDING";
-    if (taskFilter === "SUBMITTED") return assignment.submissionStatus && assignment.submissionStatus !== "PENDING";
+    if (taskFilter === "SUBMITTED") return (assignment.submissionStatus && assignment.submissionStatus !== "PENDING") && !assignment.score;
+    if (taskFilter === "SCORED") return (assignment.submissionStatus === "SCORED" || assignment.submissionStatus === "GRADED") || (assignment.score !== undefined && assignment.score !== null);
     return true;
   });
 
@@ -58,10 +59,22 @@ export function StudentDashboard() {
     const assignment = assignments.find(a => a.id === assignmentId);
     
     const type = assignment?.type?.toUpperCase();
+    const status = assignment.submissionStatus?.toLowerCase();
+    const isSubmittedOrGraded = status === "submitted" || status === "scored" || status === "graded" || (assignment.score !== undefined && assignment.score !== null);
+    
     if (type === "SPEAKING") {
-        navigate(ROUTES.LEARNER.SPEAKING_SUBMISSION.replace(":assignmentId", assignmentId));
+        if (isSubmittedOrGraded) {
+             navigate(ROUTES.LEARNER.SPEAKING_EVALUATION.replace(":assignmentId", assignmentId));
+        } else {
+             navigate(ROUTES.LEARNER.SPEAKING_SUBMISSION.replace(":assignmentId", assignmentId));
+        }
     } else {
-        navigate(ROUTES.LEARNER.WRITING_SUBMISSION.replace(":assignmentId", assignmentId));
+        // Writing Task
+        if (isSubmittedOrGraded) {
+             navigate(ROUTES.LEARNER.WRITING_EVALUATION.replace(":assignmentId", assignmentId));
+        } else {
+             navigate(ROUTES.LEARNER.WRITING_SUBMISSION.replace(":assignmentId", assignmentId));
+        }
     }
   };
 
@@ -90,6 +103,7 @@ export function StudentDashboard() {
                 { label: "All Tasks", value: "ALL" },
                 { label: "To Do", value: "TODO" },
                 { label: "Submitted", value: "SUBMITTED" },
+                { label: "Scored", value: "SCORED" },
               ].map((tab) => (
                 <button
                   key={tab.value}
@@ -109,7 +123,7 @@ export function StudentDashboard() {
             <div className='space-y-4'>
               {filteredAssignments.map((assignment) => {
                 const status = assignment.submissionStatus?.toLowerCase();
-                const isGraded = status === "scored" || status === "graded";
+                const isGraded = (status === "scored" || status === "graded") || (assignment.score !== undefined && assignment.score !== null);
                 const isSubmitted = status === "submitted" || isGraded;
 
                 return (

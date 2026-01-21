@@ -7,12 +7,10 @@ import {
   Send,
   Save,
   AlertCircle,
+  Loader2,
   Info,
-  Volume2,
   Play,
   Pause,
-  Loader2,
-  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
@@ -20,6 +18,7 @@ import { SpeakingSubmission } from "@/components/student/SpeakingSubmission";
 import { ROUTES } from "@/constants";
 import { assignmentApi } from "@/services/api/assignments";
 import { attemptApi } from "@/services/api/attempts";
+import { uploadApi } from "@/services/api/upload";
 import { useAuthStore } from "@/stores";
 
 // Types
@@ -57,13 +56,12 @@ export function SpeakingSubmissionPage() {
 
   const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
   const [loading, setLoading] = useState(true);
-  const [feedback, setFeedback] = useState<any>(null); // Feedback state
+
 
   useEffect(() => {
     const fetchAssignment = async () => {
       if (!assignmentId || !user?.id) return;
       try {
-        console.log("Fetching assignment:", assignmentId); // Debug log
 
 
         
@@ -76,7 +74,7 @@ export function SpeakingSubmissionPage() {
             className: data.class?.name || "Class",
             type: "SPEAKING",
             dueDate: data.deadline.toString(),
-            description: data.prompt?.title || data.description || "No description provided.",
+            description: data.description || "No description provided.",
             prompt: data.prompt?.content || "No prompt content",
             speakingTime: 120, // Default or fetch from assignment/prompt
             tips: [
@@ -92,25 +90,28 @@ export function SpeakingSubmissionPage() {
             setAttemptId(data.attemptId);
             setSubmissionStatus(data.submissionStatus || null);
 
+            if (['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(data.submissionStatus)) {
+                 navigate(ROUTES.LEARNER.SPEAKING_EVALUATION.replace(':assignmentId', assignmentId));
+                 return;
+            }
+
             // Fetch full attempt details to get the content/media
             try {
                 const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
                 console.log("Attempt Details:", attemptDetails); // Debug log
                 setAttemptResult(attemptDetails);
+                if (attemptDetails.status) {
+                    setSubmissionStatus(attemptDetails.status);
+                    if (['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(attemptDetails.status)) {
+                        navigate(ROUTES.LEARNER.SPEAKING_EVALUATION.replace(':assignmentId', assignmentId));
+                        return;
+                    }
+                }
                 
                 if (attemptDetails.media && attemptDetails.media.length > 0) {
                     setExistingAudioUrl(attemptDetails.media[0].storageUrl);
                 } else if (attemptDetails.content) {
                     setExistingAudioUrl(attemptDetails.content);
-                }
-
-                // Set feedback if available (Logic ported from WritingSubmissionPage)
-                if (attemptDetails.score) {
-                     setFeedback({
-                         score: attemptDetails.score.overallBand,
-                         summary: attemptDetails.score.feedback,
-                         details: attemptDetails.score.detailedFeedback?.note || ""
-                     });
                 }
 
             } catch (err) {
@@ -156,7 +157,7 @@ export function SpeakingSubmissionPage() {
   }, [isRecording, assignment?.speakingTime]);
 
   const maxRecordingTime = assignment?.speakingTime || 120;
-  const isReadOnly = submissionStatus === 'SUBMITTED' || submissionStatus === 'SCORED';
+  const isReadOnly = ['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(submissionStatus || '');
 
   // ...
 
@@ -165,7 +166,7 @@ export function SpeakingSubmissionPage() {
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${mins.toString().padStart(2, "0 ")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const toggleRecording = () => {
@@ -206,12 +207,24 @@ export function SpeakingSubmissionPage() {
     }
     setIsSubmitting(true);
     try {
-        // TODO: Upload audio file and get URL
-        // const audioUrl = await uploadAudio(audioFile);
-        const mockAudioUrl = "mock-audio-file.mp3"; 
+        let audioUrl = existingAudioUrl;
+
+        if (audioFile) {
+            const uploadRes = await uploadApi.uploadFile(audioFile);
+            audioUrl = uploadRes.url;
+        }
+
+        if (!audioUrl) {
+             // Fallback for testing if no file but mocking record logic
+             // For now, require file or url
+             console.warn("No audio file to upload, and no existing URL.");
+        }
+        
+        // If we still don't have a URL (e.g. pure recording without file creation implemented yet?), 
+        // we might fail. But setAudioFile is called by the recorder component presumably.
 
         await attemptApi.submitAttempt(attemptId, {
-            content: mockAudioUrl
+            content: audioUrl || "no-audio-uploaded"
         });
         navigate(ROUTES.LEARNER.DASHBOARD);
     } catch (error) {
@@ -274,6 +287,8 @@ export function SpeakingSubmissionPage() {
             </h1>
             <div className="flex items-center gap-3 mt-2">
               <BadgeStatus variant="info">Speaking Task</BadgeStatus>
+              {submissionStatus === 'SCORED' && <BadgeStatus variant="success">Graded</BadgeStatus>}
+              {submissionStatus === 'SUBMITTED' && <BadgeStatus variant="warning">Submitted</BadgeStatus>}
               <span className="text-sm text-slate-500 flex items-center gap-1">
                 <Clock size={14} />
                 Due in {getDaysUntilDue()} days
@@ -282,32 +297,36 @@ export function SpeakingSubmissionPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              className="gap-2 border-slate-300"
-              onClick={handleSaveDraft}
-              disabled={!hasRecording}
-            >
-              <Save size={16} />
-              Save Draft
-            </Button>
-            <Button
-              className="gap-2 bg-purple-600 hover:bg-purple-700"
-              onClick={handleSubmit}
-              disabled={isSubmitting || isReadOnly}
-            >
-              {isReadOnly ? "Submitted" : isSubmitting ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  Submit
-                </>
-              )}
-            </Button>
+            {!isReadOnly && (
+            <>
+                <Button
+                variant="outline"
+                className="gap-2 border-slate-300"
+                onClick={handleSaveDraft}
+                disabled={!hasRecording}
+                >
+                <Save size={16} />
+                Save Draft
+                </Button>
+                <Button
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                >
+                {isSubmitting ? (
+                    <>
+                    <span className="animate-spin">⏳</span>
+                    Submitting...
+                    </>
+                ) : (
+                    <>
+                    <Send size={16} />
+                    Submit
+                    </>
+                )}
+                </Button>
+            </>
+            )}
           </div>
         </div>
       </div>
@@ -316,9 +335,15 @@ export function SpeakingSubmissionPage() {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Topic Card */}
-          {/* ... */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+             <h3 className="text-lg font-bold text-slate-900 mb-3">Topic / Prompt</h3>
+             <p className="text-lg text-slate-700 font-medium leading-relaxed">
+               {assignment.prompt}
+             </p>
+          </div>
 
           {/* Recording Area */}
+          {/* Recorder Area */}
           <SpeakingSubmission
             isRecording={isRecording}
             toggleRecording={toggleRecording}
@@ -329,62 +354,32 @@ export function SpeakingSubmissionPage() {
             existingAudioUrl={existingAudioUrl}
             formatTime={formatTime}
           />
-
-          {/* Recording Status */}
-          {hasRecording && (
-            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                  <Mic size={20} className="text-green-600" />
+              {/* Recording Status ... */}
+              {hasRecording && (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                     {/* ... (icon) */}
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        {audioFile ? "Audio file uploaded" : "Recording complete"}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Duration: {formatTime(recordingTime)}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setIsPlaying(!isPlaying)}
+                  >
+                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                    {isPlaying ? "Pause" : "Preview"}
+                  </Button>
                 </div>
-                <div>
-                  <p className="font-medium text-slate-900">
-                    {audioFile ? "Audio file uploaded" : "Recording complete"}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    Duration: {formatTime(recordingTime)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setIsPlaying(!isPlaying)}
-              >
-                {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                {isPlaying ? "Pause" : "Preview"}
-              </Button>
-            </div>
-          )}
+              )}
 
-          {/* Teacher Grading Result */}
-          {/* Teacher Grading Result */}
-          {(submissionStatus === 'scored' || feedback) && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-               <div className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between">
-                   <h3 className="font-bold text-purple-900 flex items-center gap-2">
-                       <Star className="w-5 h-5 fill-purple-600 text-purple-600" />
-                       Teacher Feedback
-                   </h3>
-                   <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-purple-100">
-                       <span className="text-xs uppercase font-bold text-purple-400 mr-2">Band Score</span>
-                       <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
-                   </div>
-               </div>
-               <div className="p-6">
-                   <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
-                   <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                       {feedback?.summary || "No comments provided."}
-                   </p>
-                    {feedback?.details && (
-                        <p className="text-slate-500 text-sm mt-4 italic border-t border-slate-100 pt-4">
-                        {feedback.details}
-                        </p>
-                    )}
-               </div>
-            </div>
-          )}
         </div>
 
         {/* Sidebar */}

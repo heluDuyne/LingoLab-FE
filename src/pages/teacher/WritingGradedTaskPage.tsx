@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Clock, Star, Sparkles, CheckCircle2, AlertCircle, FileText, ExternalLink, Bold, Italic, List, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, Clock, Star, Sparkles, CheckCircle2, AlertCircle, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,14 +9,11 @@ import { attemptApi } from "@/services/api/attempts";
 import { toast } from "sonner";
 import { BadgeStatus } from "@/components/ui/badge-status";
 
-export function GradingPage() {
+export function WritingGradedTaskPage() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [score, setScore] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (attemptId) {
@@ -34,32 +31,6 @@ export function GradingPage() {
       toast.error("Failed to load submission");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!attemptId) return;
-    
-    // Validate score
-    const numScore = parseFloat(score);
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) { 
-        toast.error("Please enter a valid numeric score");
-        return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      await attemptApi.gradeAttempt(attemptId, {
-          score: numScore,
-          feedback: feedback
-      });
-      toast.success("Grading saved successfully!");
-      navigate(-1);
-    } catch (error) {
-      console.error("Failed to save grading", error);
-      toast.error("Failed to save grading");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -83,6 +54,10 @@ export function GradingPage() {
   }
 
   const wordCount = attempt.content ? attempt.content.split(/\s+/).length : 0;
+  
+  // Extract teacher feedback and score
+  const teacherFeedback = attempt.feedbacks?.find((f: any) => f.type === 'TEACHER')?.content || attempt.score?.feedback || "";
+  const overallScore = attempt.score?.overallBand || "";
 
   return (
     <div className="max-w-[1600px] mx-auto pb-12 animate-in fade-in duration-300 px-4 sm:px-6">
@@ -97,9 +72,17 @@ export function GradingPage() {
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
             </Button>
-            <div className="flex items-center text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                <Clock className="w-4 h-4 mr-2" />
-                Submitted: {new Date(attempt.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+            <div className="flex items-center gap-2">
+                <div className="flex items-center text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                    <Clock className="w-4 h-4 mr-2" />
+                    Submitted: {new Date(attempt.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                </div>
+                {attempt.scoredAt && (
+                    <div className="flex items-center text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Graded: {new Date(attempt.scoredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </div>
+                )}
             </div>
         </div>
         
@@ -167,7 +150,7 @@ export function GradingPage() {
                )}
             </CardContent>
              <div className="border-t border-slate-100 p-4 bg-slate-50/50 flex justify-between items-center text-xs text-slate-500 font-medium">
-                <span>Word Count: {wordCount} words</span>
+                <span>Word count: {wordCount} words</span>
                 <button className="flex items-center text-purple-600 hover:text-purple-700 transition-colors">
                     <ExternalLink className="h-3 w-3 mr-1" />
                     View Original
@@ -241,13 +224,13 @@ export function GradingPage() {
             </Card>
         </div>
 
-        {/* Column 3: Grading Form */}
+        {/* Column 3: Grading Result (Read Only) */}
         <div className="xl:col-span-1 space-y-4">
             <Card className="border-slate-200 shadow-sm sticky top-6">
                 <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5">
                     <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                         <Star className="w-5 h-5 text-purple-600 fill-purple-600" />
-                        Feedback & Score
+                        Teacher Grading
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
@@ -257,48 +240,21 @@ export function GradingPage() {
                         <div className="relative">
                             <Input 
                                 type="text" 
-                                placeholder="e.g., 7.5"
-                                value={score}
-                                onChange={(e) => setScore(e.target.value)}
-                                className="pl-4 pr-12 h-11 text-lg font-medium"
+                                value={overallScore}
+                                readOnly
+                                className="pl-4 pr-12 h-11 text-lg font-bold bg-slate-50 text-slate-900 border-slate-200"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">/ 9.0</span>
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-900">Detailed Feedback</label>
+                        <label className="text-sm font-bold text-slate-900">Teacher Feedback</label>
                         <Textarea 
-                            placeholder="Enter constructive feedback for the student..." 
-                            className="min-h-[200px] resize-none p-4 text-base leading-relaxed"
-                            value={feedback}
-                            onChange={(e) => setFeedback(e.target.value)}
+                            readOnly
+                            value={teacherFeedback || "No feedback provided."}
+                            className="min-h-[200px] resize-none p-4 text-base leading-relaxed bg-slate-50 text-slate-800 focus-visible:ring-0 border-slate-200"
                         />
-                         {/* Toolbar Mockup */}
-                        <div className="flex items-center gap-1 p-1 bg-slate-50 border border-slate-200 border-t-0 rounded-b-md -mt-2">
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200"><Bold className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200"><Italic className="h-3.5 w-3.5" /></Button>
-                            <div className="h-4 w-px bg-slate-300 mx-1" />
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200"><List className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200"><LinkIcon className="h-3.5 w-3.5" /></Button>
-                        </div>
-                    </div>
-
-                    <div className="pt-4 space-y-3">
-                        <Button 
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11 shadow-lg shadow-purple-200 transition-all hover:translate-y-[-1px]"
-                            onClick={handleSubmit}
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting ? "Saving..." : "Submit Grade"}
-                        </Button>
-                        <Button 
-                            variant="outline"
-                            className="w-full border-slate-200 text-slate-700 font-bold h-11 hover:bg-slate-50"
-                            onClick={() => toast.info("Draft saved locally")}
-                        >
-                            Save as Draft
-                        </Button>
                     </div>
                 </CardContent>
             </Card>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   Download,
@@ -13,32 +13,68 @@ import {
   BookOpen,
   Bot,
   ChevronDown,
-  ChevronUp,
+  ChevronUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants";
-import {
-  mockAssignments,
-  mockSubmissions,
-  mockStudents,
-  type TaskType,
-} from "@/data";
+import { assignmentApi } from "@/services/api/assignments";
+import { authApi } from "@/services/api/auth";
+import { toast } from "sonner";
+import { type AssignmentList, type AssignmentStudentSubmissionDTO } from "@/types";
+
 
 export function ReportPage() {
   const navigate = useNavigate();
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submissionsMap, setSubmissionsMap] = useState<Record<string, any[]>>({});
+  const [loadingSubmissions, setLoadingSubmissions] = useState<Record<string, boolean>>({});
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState("All Types");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const toggleExpand = (id: string) => {
+  useEffect(() => {
+    fetchAssignments();
+  }, []);
+
+  const fetchAssignments = async () => {
+    try {
+      setLoading(true);
+      const user = await authApi.getCurrentUser();
+      // teacherId was unused, used generic teacher endpoint
+      const res = await assignmentApi.getTeacherAssignments();
+      setAssignments(res.data);
+    } catch (error) {
+      console.error("Failed to load reports", error);
+      toast.error("Failed to load report data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleExpand = async (id: string) => {
     setExpandedTaskId(expandedTaskId === id ? null : id);
+    
+    // Fetch submissions if not already loaded and opening
+    if (expandedTaskId !== id && !submissionsMap[id]) {
+      try {
+        setLoadingSubmissions(prev => ({ ...prev, [id]: true }));
+        const res = await assignmentApi.getStudentSubmissions(id);
+        setSubmissionsMap(prev => ({ ...prev, [id]: res }));
+      } catch (error) {
+        console.error("Failed to fetch submissions", error);
+        toast.error("Failed to load submissions details");
+      } finally {
+        setLoadingSubmissions(prev => ({ ...prev, [id]: false }));
+      }
+    }
   };
 
   // Filter assignments based on type and search
-  const filteredAssignments = mockAssignments.filter((assign) => {
+  const filteredAssignments = assignments.filter((assign) => {
     const matchesType =
       filterType === "All Types" ||
-      assign.type.toLowerCase() === filterType.toLowerCase();
+      (assign.type || "").toUpperCase() === filterType.toUpperCase();
     const matchesSearch = assign.title
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
@@ -46,24 +82,24 @@ export function ReportPage() {
   });
 
   // Helper to get stats
-  const totalTasks = mockAssignments.length;
-  const gradedSubs = mockSubmissions.filter(
-    (s) => s.status === "GRADED" && s.aiFeedback
-  );
-  const avgScore =
-    gradedSubs.length > 0
-      ? (
-          gradedSubs.reduce((acc, s) => acc + (s.aiFeedback?.score || 0), 0) /
-          gradedSubs.length
-        ).toFixed(1)
-      : "0.0";
+  const totalTasks = assignments.length;
+  // Calculate average of averages (simplistic) or weighted? 
+  // Ideally backend gives agg stats, but frontend calc is fine for now.
+  const scoredAssignments = assignments.filter(a => a.averageScore && Number(a.averageScore) > 0);
+  const avgScore = scoredAssignments.length > 0
+    ? (scoredAssignments.reduce((acc, a) => acc + Number(a.averageScore), 0) / scoredAssignments.length).toFixed(1)
+    : "0.0";
 
-  const pendingCount = mockSubmissions.filter(
-    (s) => s.status === "SUBMITTED"
-  ).length;
+  // Pending reviews: Total Submitted - Total Scored
+  const pendingCount = assignments.reduce((acc, a) => {
+      const submitted = a.totalSubmitted || 0;
+      const scored = a.totalScored || 0;
+      return acc + Math.max(0, submitted - scored);
+  }, 0);
 
-  const getTaskIcon = (type: TaskType) => {
-    switch (type) {
+  const getTaskIcon = (type: string) => {
+    const t = (type || "").toUpperCase();
+    switch (t) {
       case "SPEAKING":
         return <Mic size={14} />;
       case "WRITING":
@@ -73,8 +109,9 @@ export function ReportPage() {
     }
   };
 
-  const getTaskColor = (type: TaskType) => {
-    switch (type) {
+  const getTaskColor = (type: string) => {
+    const t = (type || "").toUpperCase();
+    switch (t) {
       case "SPEAKING":
         return "bg-purple-50 text-purple-700 ring-purple-700/10";
       case "WRITING":
@@ -86,11 +123,6 @@ export function ReportPage() {
 
   const handleAssignTask = () => {
     navigate(ROUTES.TEACHER.CREATE_TASK);
-  };
-
-  const handleViewFeedback = (submissionId: string) => {
-    console.log("View feedback for submission:", submissionId);
-    // In a real app, this would navigate to a detailed feedback view
   };
 
   return (
@@ -237,34 +269,32 @@ export function ReportPage() {
               </tr>
             </thead>
             <tbody className='divide-y divide-slate-200'>
-              {filteredAssignments.map((assign) => {
-                // Calc stats for this assignment
-                const assignSubs = mockSubmissions.filter(
-                  (s) => s.assignmentId === assign.id
-                );
-                const completedCount = assignSubs.length;
-                const totalStudents = mockStudents.length || 1;
-                const percentComplete = Math.round(
-                  (completedCount / totalStudents) * 100
-                );
+              {loading ? (
+                 <tr><td colSpan={6} className="text-center py-8">Loading reports...</td></tr>
+              ) : filteredAssignments.length === 0 ? (
+                 <tr>
+                    <td colSpan={6} className='text-center py-8 text-slate-400 italic'>
+                         No tasks found.
+                    </td>
+                 </tr>
+              ) : (
+                filteredAssignments.map((assign) => {
+                  const completedCount = assign.totalSubmitted || 0;
+                  const totalStudents = assign.totalEnrolled || 1; 
+                  const percentComplete = totalStudents > 0 
+                      ? Math.round((completedCount / totalStudents) * 100) 
+                      : 0;
+                  
+                  const assignAvg = assign.averageScore && Number(assign.averageScore) > 0 
+                      ? Number(assign.averageScore).toFixed(1) 
+                      : "--";
 
-                const assignGraded = assignSubs.filter(
-                  (s) => s.status === "GRADED"
-                );
-                const assignAvg =
-                  assignGraded.length > 0
-                    ? (
-                        assignGraded.reduce(
-                          (acc, s) => acc + (s.aiFeedback?.score || 0),
-                          0
-                        ) / assignGraded.length
-                      ).toFixed(1)
-                    : "--";
+                  const isExpanded = expandedTaskId === assign.id;
+                  const assignSubs = submissionsMap[assign.id] || [];
+                  const isLoadingSubs = loadingSubmissions[assign.id];
 
-                const isExpanded = expandedTaskId === assign.id;
-
-                return (
-                  <tr key={assign.id} className='contents'>
+                  return (
+                    <tr key={assign.id} className='contents'>
                     <tr
                       className={`group hover:bg-slate-50 transition-colors cursor-pointer ${
                         isExpanded ? "bg-slate-50" : ""
@@ -343,54 +373,44 @@ export function ReportPage() {
                               </button>
                             </div>
                             <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-                              {assignSubs.length > 0 ? (
-                                assignSubs.map((sub) => {
-                                  const st = mockStudents.find(
-                                    (s) => s.id === sub.studentId
-                                  );
+                              {isLoadingSubs ? (
+                                    <div className='col-span-3 text-center py-4 text-slate-400'>Loading details...</div>
+                              ) : assignSubs.length > 0 ? (
+                                assignSubs.map((sub: any, idx: number) => {
                                   return (
                                     <div
-                                      key={sub.id}
+                                      key={idx}
                                       className='flex items-center p-3 rounded-lg bg-white border border-slate-200 shadow-sm gap-3 cursor-pointer hover:border-purple-300 transition-colors'
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleViewFeedback(sub.id);
+                                        // handleViewFeedback(sub.id); // Id might not be in the lightweight DTO depending on backend
                                       }}
                                     >
                                       <div
                                         className='bg-purple-100 rounded-full size-10 flex-shrink-0 flex items-center justify-center text-purple-600 font-bold bg-cover bg-center'
-                                        style={
-                                          st?.avatar
-                                            ? {
-                                                backgroundImage: `url(${st.avatar})`,
-                                              }
-                                            : {}
-                                        }
                                       >
-                                        {!st?.avatar && (st?.name[0] || "?")}
+                                        {(sub.learnerName?.[0] || "?").toUpperCase()}
                                       </div>
                                       <div className='flex-1 min-w-0'>
                                         <p className='text-sm font-semibold text-slate-900 truncate hover:text-purple-600 transition-colors'>
-                                          {st?.name || "Unknown"}
+                                          {sub.learnerName || sub.learnerEmail || "Unknown"}
                                         </p>
                                         <p className='text-xs text-slate-500'>
                                           Submitted:{" "}
-                                          {new Date(
-                                            sub.submittedAt || ""
-                                          ).toLocaleDateString()}
+                                          {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString() : "Pending"}
                                         </p>
                                       </div>
                                       <div className='flex flex-col items-end gap-1'>
-                                        {sub.aiFeedback?.score ? (
+                                        {sub.score ? (
                                           <span className='inline-flex items-center rounded-md bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700 ring-1 ring-inset ring-green-600/20'>
-                                            {sub.aiFeedback.score}
+                                            {sub.score}
                                           </span>
                                         ) : (
                                           <span className='inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600'>
-                                            Pending
+                                            {sub.status || "Pending"}
                                           </span>
                                         )}
-                                        {sub.aiFeedback && (
+                                        {sub.score && (
                                           <span className='text-[10px] text-slate-500 flex items-center gap-0.5'>
                                             <Bot size={10} /> AI
                                           </span>
@@ -411,17 +431,7 @@ export function ReportPage() {
                     )}
                   </tr>
                 );
-              })}
-              {filteredAssignments.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className='text-center py-8 text-slate-400 italic'
-                  >
-                    No tasks found.
-                  </td>
-                </tr>
-              )}
+              }))}
             </tbody>
           </table>
         </div>

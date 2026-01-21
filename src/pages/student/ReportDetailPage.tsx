@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router";
+import { useEffect, useState } from "react"; // Added imports
 import {
   ArrowLeft,
   FileText,
@@ -11,10 +12,13 @@ import {
   BookOpen,
   TrendingUp,
   AlertTriangle,
+  UserCheck, // Added icon for teacher feedback
+  Loader2 // Added loader
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
 import { ROUTES } from "@/constants";
+import { attemptApi } from "@/services/api/attempts";
 
 // Types
 interface AIFeedback {
@@ -37,88 +41,95 @@ interface Submission {
   assignmentTitle: string;
   assignmentClassName: string;
   studentId: string;
-  status: "PENDING" | "SUBMITTED" | "GRADED";
+  status: "PENDING" | "SUBMITTED" | "GRADED" | "SCORED"; // Updated status
   submittedAt?: string;
   mediaType?: string;
   content?: string;
   aiFeedback?: AIFeedback;
+  teacherFeedback?: {
+    score: number;
+    feedback: string;
+    gradedBy: string;
+    gradedAt: string;
+  };
 }
-
-// Mock data
-const mockSubmission: Submission = {
-  id: "s1",
-  assignmentId: "a3",
-  assignmentTitle: "IELTS Writing Task 2 - Environment Essay",
-  assignmentClassName: "IELTS Writing",
-  studentId: "student-001",
-  status: "GRADED",
-  submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  mediaType: "text",
-  content: `Climate change is one of the most pressing issues facing our planet today. Many scientists argue that human activities, particularly the burning of fossil fuels, have significantly contributed to global warming. This essay will discuss the causes of climate change and propose some solutions to address this critical problem.
-
-The primary cause of climate change is the emission of greenhouse gases, mainly carbon dioxide, from industrial activities and transportation. As economies grow and more people rely on cars and factories, the concentration of these gases in the atmosphere continues to rise. Additionally, deforestation has reduced the Earth's capacity to absorb carbon dioxide, exacerbating the problem.
-
-To combat climate change, governments and individuals must take action. Firstly, investing in renewable energy sources such as solar and wind power can reduce our dependence on fossil fuels. Secondly, implementing stricter regulations on industrial emissions and promoting sustainable practices can help lower greenhouse gas output. Finally, raising awareness about environmental issues can encourage individuals to make more eco-friendly choices in their daily lives.
-
-In conclusion, while climate change poses a significant threat to our planet, collective action from governments, businesses, and individuals can help mitigate its effects and create a more sustainable future for generations to come.`,
-  aiFeedback: {
-    score: 7.5,
-    summary:
-      "This is a well-structured essay that effectively addresses the topic of climate change. The writer demonstrates good control of language and presents ideas in a logical manner. However, there is room for improvement in vocabulary range and the development of supporting ideas.",
-    strengths: [
-      "Clear introduction with a well-defined thesis statement that outlines the essay structure",
-      "Good use of linking words and cohesive devices throughout the essay",
-      "Logical paragraph organization with clear topic sentences",
-      "Effective conclusion that summarizes main points and provides a forward-looking statement",
-    ],
-    weaknesses: [
-      "Some subject-verb agreement errors in complex sentences",
-      "Limited range of vocabulary - some words are repeated (e.g., 'climate change', 'greenhouse gases')",
-      "Supporting examples could be more specific and detailed",
-      "Some ideas need further development to fully support the argument",
-    ],
-    detailedAnalysis: {
-      taskAchievement: {
-        score: 7.5,
-        feedback:
-          "The essay addresses all parts of the task. Main ideas are relevant and well-supported, though some points could be developed further with more specific examples.",
-      },
-      coherenceCohesion: {
-        score: 8.0,
-        feedback:
-          "The essay is well-organized with clear progression throughout. Paragraphs are well-linked, and cohesive devices are used effectively without being overused.",
-      },
-      lexicalResource: {
-        score: 7.0,
-        feedback:
-          "Good vocabulary range with some less common items. However, there is some repetition of key terms. Consider using more synonyms and academic vocabulary.",
-      },
-      grammaticalRange: {
-        score: 7.5,
-        feedback:
-          "Good variety of complex structures with generally accurate grammar. Some minor errors occur but do not impede communication.",
-      },
-    },
-    suggestions: [
-      "Use more specific statistics or research findings to support your arguments",
-      "Expand your vocabulary by learning synonyms for common environmental terms",
-      "Practice using a wider variety of complex sentence structures",
-      "Include more concrete examples from real-world situations",
-      "Review subject-verb agreement rules for complex sentences",
-    ],
-  },
-};
 
 export function ReportDetailPage() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
+  const [submission, setSubmission] = useState<Submission | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // In a real app, fetch submission by ID
-  const submission = mockSubmission;
+  useEffect(() => {
+      const fetchSubmission = async () => {
+          if (!submissionId) return;
+          try {
+              const data = await attemptApi.getAttemptById(submissionId);
+              
+              // Map API response to Component State
+              const mappedSubmission: Submission = {
+                  id: data.id,
+                  assignmentId: data.assignment?.id || "",
+                  assignmentTitle: data.assignmentTitle || "Untitled Assignment",
+                  assignmentClassName: data.className || "Unknown Class",
+                  studentId: data.learnerId,
+                  status: data.status === 'scored' ? 'GRADED' : (data.status === 'submitted' ? 'SUBMITTED' : 'PENDING'),
+                  submittedAt: data.submittedAt,
+                  mediaType: data.skillType === 'speaking' ? 'audio' : 'text', // Infer from skillType
+                  content: data.content,
+                  aiFeedback: data.score ? {
+                      score: Number(data.score.overallBand),
+                      summary: (data.score.detailedFeedback?.issues || data.score.detailedFeedback?.actions) 
+                          ? `${data.score.detailedFeedback.issues || ''}\n\n${data.score.detailedFeedback.actions || ''}`.trim()
+                          : data.score.feedback, // Use detailed if available (AI), else feedback (AI or Teacher if overwritten, but logic below handles separation)
+                      strengths: Array.isArray(data.score.detailedFeedback?.strengths) ? data.score.detailedFeedback.strengths : [],
+                      weaknesses: Array.isArray(data.score.detailedFeedback?.weaknesses) ? data.score.detailedFeedback.weaknesses : [],
+                      suggestions: typeof data.score.detailedFeedback?.actions === 'string' 
+                          ? data.score.detailedFeedback.actions.split('\n').filter((s: string) => s.trim()) 
+                          : (Array.isArray(data.score.detailedFeedback?.actions) ? data.score.detailedFeedback.actions : []),
+                      detailedAnalysis: data.score.detailedFeedback?.aiScores ? {
+                           taskAchievement: { score: Number(data.score.detailedFeedback.aiScores.taskResponse || 0), feedback: "" },
+                           coherenceCohesion: { score: Number(data.score.detailedFeedback.aiScores.coherence || 0), feedback: "" },
+                           lexicalResource: { score: Number(data.score.detailedFeedback.aiScores.lexical || 0), feedback: "" },
+                           grammaticalRange: { score: Number(data.score.detailedFeedback.aiScores.grammar || 0), feedback: "" }
+                      } : undefined
+                  } : undefined,
+                  teacherFeedback: data.score?.detailedFeedback?.gradedByTeacher ? {
+                      score: Number(data.score.overallBand),
+                      feedback: data.score.feedback,
+                      gradedBy: "Teacher", // Could be enriched if we had teacher name in score
+                      gradedAt: data.scoredAt || new Date().toISOString()
+                  } : undefined
+              };
+
+              // Fallback for strengths/weaknesses if not structured (e.g. from simpler AI response)
+              if (mappedSubmission.aiFeedback && mappedSubmission.aiFeedback.strengths.length === 0) {
+                   // Try to parse from free text feedback if needed, or leave empty
+              }
+
+              setSubmission(mappedSubmission);
+
+          } catch (error) {
+              console.error("Failed to load submission", error);
+          } finally {
+              setLoading(false);
+          }
+      };
+
+      fetchSubmission();
+  }, [submissionId]);
 
   const handleBack = () => {
-    navigate(ROUTES.LEARNER.DASHBOARD);
+    navigate(ROUTES.LEARNER.PROGRESS); // Redirect to Progress or Dashboard
   };
+
+  if (loading) {
+      return (
+          <div className="flex h-screen items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+          </div>
+      );
+  }
 
   if (!submission) {
     return (
@@ -129,6 +140,7 @@ export function ReportDetailPage() {
   }
 
   const { aiFeedback } = submission;
+  const teacherFeedback = submission.teacherFeedback;
 
   return (
     <div className="max-w-6xl mx-auto pb-12 animate-in fade-in duration-300">
@@ -139,7 +151,7 @@ export function ReportDetailPage() {
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors w-fit"
         >
           <ArrowLeft size={16} />
-          Back to Dashboard
+          Back to Progress
         </button>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -182,8 +194,31 @@ export function ReportDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Overall Score Card */}
-          {aiFeedback && (
+          
+          {/* Teacher Feedback Card (If exists) */}
+          {teacherFeedback && (
+             <div className="bg-white rounded-xl border border-indigo-100 p-6 shadow-sm ring-1 ring-indigo-50">
+               <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <UserCheck size={24} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Teacher's Feedback</h3>
+                    <p className="text-sm text-slate-500">Graded by {teacherFeedback.gradedBy}</p>
+                  </div>
+                  <div className="ml-auto text-right">
+                      <div className="text-2xl font-bold text-indigo-600">{teacherFeedback.score}</div>
+                      <div className="text-xs text-slate-500">Overall Score</div>
+                  </div>
+               </div>
+               <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 text-slate-700 whitespace-pre-wrap">
+                   {teacherFeedback.feedback}
+               </div>
+             </div>
+          )}
+
+          {/* Overall Score Card AI */}
+          {aiFeedback && !teacherFeedback && (
             <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -206,7 +241,7 @@ export function ReportDetailPage() {
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <TrendingUp size={20} className="text-purple-600" />
-                Detailed Band Scores
+                Detailed Band Scores (AI)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Task Achievement */}
@@ -227,9 +262,6 @@ export function ReportDetailPage() {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {aiFeedback.detailedAnalysis.taskAchievement.feedback}
-                  </p>
                 </div>
 
                 {/* Coherence & Cohesion */}
@@ -250,9 +282,6 @@ export function ReportDetailPage() {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {aiFeedback.detailedAnalysis.coherenceCohesion.feedback}
-                  </p>
                 </div>
 
                 {/* Lexical Resource */}
@@ -273,9 +302,6 @@ export function ReportDetailPage() {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {aiFeedback.detailedAnalysis.lexicalResource.feedback}
-                  </p>
                 </div>
 
                 {/* Grammatical Range */}
@@ -296,9 +322,6 @@ export function ReportDetailPage() {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {aiFeedback.detailedAnalysis.grammaticalRange.feedback}
-                  </p>
                 </div>
               </div>
             </div>
@@ -340,7 +363,7 @@ export function ReportDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Strengths */}
-          {aiFeedback && (
+          {aiFeedback && aiFeedback.strengths.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <CheckCircle size={20} className="text-green-600" />
@@ -364,7 +387,7 @@ export function ReportDetailPage() {
           )}
 
           {/* Areas for Improvement */}
-          {aiFeedback && (
+          {aiFeedback && aiFeedback.weaknesses.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <AlertTriangle size={20} className="text-amber-600" />
@@ -388,7 +411,7 @@ export function ReportDetailPage() {
           )}
 
           {/* Suggestions */}
-          {aiFeedback?.suggestions && (
+          {aiFeedback?.suggestions && aiFeedback.suggestions.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <BookOpen size={20} className="text-blue-600" />

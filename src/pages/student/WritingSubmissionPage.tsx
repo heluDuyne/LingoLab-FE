@@ -68,14 +68,12 @@ export function WritingSubmissionPage() {
             className: data.class?.name || "Class",
             type: "WRITING",
             dueDate: data.deadline.toString(),
-            description: data.prompt?.title || data.description || "No description provided.",
+            description: data.description || "No description provided.",
             promptId: data.prompt?.id || data.promptId,
-            // Mock instructions/limits
-            instructions: [
-                "Read the prompt carefully before you begin writing",
-                "Plan your essay structure",
-                "Review your work before submitting",
-            ],
+            // Use prompt content as instructions, split by newlines if applicable
+            instructions: data.prompt?.content 
+                ? data.prompt.content.split('\n').filter((line: string) => line.trim().length > 0)
+                : ["Read the prompt carefully before you begin writing"],
             wordLimit: { min: 40, max: 400 },
         });
 
@@ -176,7 +174,12 @@ export function WritingSubmissionPage() {
             content: text,
         });
         toast.success("Submission successful!");
-        navigate(ROUTES.LEARNER.DASHBOARD);
+        // Redirect to evaluation page to see scores immediately
+        if (assignmentId) {
+             navigate(ROUTES.LEARNER.WRITING_EVALUATION.replace(':assignmentId', assignmentId));
+        } else {
+             navigate(ROUTES.LEARNER.DASHBOARD);
+        }
     } catch (err: any) {
         console.error("Submission failed", err);
         const errorMessage = err.message || "Failed to submit. Please try again.";

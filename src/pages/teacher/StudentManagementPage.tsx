@@ -74,12 +74,7 @@ export function StudentManagementPage() {
   };
 
   // Deterministic mock data for demo purposes based on ID until backend supports it
-  const getMockData = (id: string) => {
-    const num = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const progress = num % 100;
-    // Format createdAt as last active for now or use random relative time
-    return { progress, lastActive: "N/A" };
-  };
+
 
   const handleSelectStudent = (studentId: string) => {
     // Navigate to student profile/detail. Route needs to be defined.
@@ -180,10 +175,7 @@ export function StudentManagementPage() {
                   Student Name
                 </th>
                 <th className='px-6 py-3 font-medium tracking-wider'>
-                  Enrolled Course
-                </th>
-                <th className='px-6 py-3 font-medium tracking-wider'>
-                  Progress
+                  Enrolled Class
                 </th>
                 <th className='px-6 py-3 font-medium tracking-wider'>
                   Last Active
@@ -206,7 +198,6 @@ export function StudentManagementPage() {
                   </td>
                 </tr>
               ) : (filteredStudents.map((student) => {
-                const { lastActive } = getMockData(student.id);
                 const studentName = getStudentName(student);
                 return (
                   <tr
@@ -274,14 +265,11 @@ export function StudentManagementPage() {
                       </div>
                     </th>
                     <td className='px-6 py-4 text-slate-600'>
-                      {getStudentCourse(student.id)}
+                      {(student as any).enrolledClass || "-"}
                     </td>
-                    <td className='px-6 py-4'>
-                       <span className='font-medium text-slate-400 text-xs'>
-                          N/A
-                       </span>
+                    <td className='px-6 py-4 text-slate-600'>
+                        {(student as any).lastActiveAt ? new Date((student as any).lastActiveAt).toLocaleDateString() : "-"}
                     </td>
-                    <td className='px-6 py-4 text-slate-600'>{lastActive}</td>
                     <td className='px-6 py-4 text-right'>
                       <div className='flex justify-end items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity'>
                         <button

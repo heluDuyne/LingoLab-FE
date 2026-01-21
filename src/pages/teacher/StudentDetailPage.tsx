@@ -2,8 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
-  Edit3,
-  FilePlus,
   Phone,
   MapPin,
   CheckCircle,
@@ -72,14 +70,14 @@ export function StudentDetailPage() {
 
         // Process Stats
         const scoredAttempts = allAttempts.filter((a: any) =>
-            (a.status === 'SCORED' || a.status === 'SUBMITTED') && a.score?.overallBand
+            ((a.status?.toUpperCase() === 'SCORED') || (a.status?.toUpperCase() === 'SUBMITTED')) && a.score?.overallBand
         ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         const totalScore = scoredAttempts.reduce((sum: number, a: any) => sum + Number(a.score.overallBand || 0), 0);
         const overallAvg = scoredAttempts.length ? (totalScore / scoredAttempts.length).toFixed(1) : "0.0";
 
-        const writingAttempts = scoredAttempts.filter((a: any) => a.type === 'WRITING' || a.skillType === 'WRITING'); // Check backend field
-        const speakingAttempts = scoredAttempts.filter((a: any) => a.type === 'SPEAKING' || a.skillType === 'SPEAKING');
+        const writingAttempts = scoredAttempts.filter((a: any) => (a.type?.toUpperCase() === 'WRITING' || a.skillType?.toUpperCase() === 'WRITING'));
+        const speakingAttempts = scoredAttempts.filter((a: any) => (a.type?.toUpperCase() === 'SPEAKING' || a.skillType?.toUpperCase() === 'SPEAKING'));
 
         const wScore = writingAttempts.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0);
         const sScore = speakingAttempts.reduce((s: number, a: any) => s + Number(a.score.overallBand || 0), 0);
@@ -179,8 +177,12 @@ export function StudentDetailPage() {
 
   // Filter logic for table
   const filteredAttempts = attempts.filter((a) => {
+      const isScored = a.status?.toUpperCase() === 'SCORED';
+      if (!isScored) return false;
+
       if (taskFilter === "ALL") return true;
-      return a.skillType === taskFilter || a.type === taskFilter;
+      const type = (a.skillType || a.type || "").toUpperCase();
+      return type === taskFilter;
   });
 
   return (
@@ -201,17 +203,6 @@ export function StudentDetailPage() {
           <p className='text-base text-slate-500'>
             {student.email} • ID: #{student.id.slice(-6).toUpperCase()}
           </p>
-        </div>
-        <div className='flex items-center gap-3'>
-          <Button
-            variant='outline'
-            className='gap-2 hover:text-purple-600 hover:border-purple-600 hover:bg-purple-50'
-          >
-            <Edit3 size={16} /> Edit Profile
-          </Button>
-          <Button className='gap-2 bg-purple-600 hover:bg-purple-700 shadow-purple-200'>
-            <FilePlus size={16} /> Assign Task
-          </Button>
         </div>
       </div>
 
@@ -386,7 +377,18 @@ export function StudentDetailPage() {
                     </tr>
                   ) : (
                     filteredAttempts.map((attempt) => (
-                        <tr key={attempt.id} className='hover:bg-slate-50 transition-colors'>
+                        <tr 
+                          key={attempt.id} 
+                          className='hover:bg-slate-50 transition-colors cursor-pointer'
+                          onClick={() => {
+                              const isScored = attempt.status?.toUpperCase() === 'SCORED';
+                              if (isScored) {
+                                  navigate(`/teacher/graded/${attempt.id}`);
+                              } else {
+                                  navigate(`/teacher/grading/${attempt.id}`);
+                              }
+                          }}
+                        >
                           <td className='px-6 py-4'>
                             <div className='flex items-start gap-3'>
                               <div className={`p-2 rounded-lg border ${getTaskColorClass(attempt.skillType || attempt.type)}`}>
@@ -403,11 +405,11 @@ export function StudentDetailPage() {
                             </div>
                           </td>
                           <td className='px-6 py-4'>
-                             {attempt.status === 'SCORED' ? (
+                             {attempt.status?.toUpperCase() === 'SCORED' ? (
                                  <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs font-medium">
                                      <CheckCircle size={14} /> Scored
                                  </span>
-                             ) : attempt.status === 'SUBMITTED' ? (
+                             ) : attempt.status?.toUpperCase() === 'SUBMITTED' ? (
                                  <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-full text-xs font-medium">
                                      <Clock size={14} /> Submitted
                                  </span>
@@ -425,7 +427,7 @@ export function StudentDetailPage() {
                             )}
                           </td>
                           <td className='px-6 py-4 text-right'>
-                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => window.location.href = `/teacher/grading/${attempt.id}`}>
+                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                                 <ArrowRight size={16} className="text-purple-600"/>
                              </Button>
                           </td>

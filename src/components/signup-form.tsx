@@ -12,14 +12,14 @@ import { toast } from "sonner";
 
 const signUpSchema = z
   .object({
-    lastname: z.string().min(1, { message: "Họ là bắt buộc" }),
-    firstname: z.string().min(1, { message: "Tên là bắt buộc" }),
-    email: z.string().email({ message: "Email không hợp lệ" }),
-    password: z.string().min(8, { message: "Mật khẩu phải có ít nhất 8 ký tự" }),
-    confirmPassword: z.string().min(8, { message: "Xác nhận mật khẩu phải có ít nhất 8 ký tự" }),
+    lastname: z.string().min(1, { message: "Last name is required" }),
+    firstname: z.string().min(1, { message: "First name is required" }),
+    email: z.string().email({ message: "Invalid email" }),
+    password: z.string().min(8, { message: "Password must be at least 8 characters" }),
+    confirmPassword: z.string().min(8, { message: "Confirm password must be at least 8 characters" }),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Mật khẩu không khớp",
+    message: "Passwords do not match",
     path: ["confirmPassword"],
   });
 
@@ -49,11 +49,11 @@ export function SignupForm({
         firstName: data.firstname,
         lastName: data.lastname,
       });
-      toast.success("Đăng ký thành công!");
+      toast.success("Registration successful!");
       navigate("/signin");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Đăng ký thất bại"
+        error instanceof Error ? error.message : "Registration failed"
       );
     }
   };
@@ -69,16 +69,16 @@ export function SignupForm({
                 <a href='/' className='mx-auto block w-fit text-center'>
                   <img src='/logo.svg' alt='logo' />
                 </a>
-                <h1 className='text-2xl font-bold'>Tạo tài khoản </h1>
+                <h1 className='text-2xl font-bold'>Create an account</h1>
                 <p className='text-muted-foreground text-balance'>
-                  Đăng ký để trở thành một người dùng của chúng tôi
+                  Sign up to become our user
                 </p>
               </div>
               {/* Họ và tên*/}
               <div className='grid grid-cols-2 gap-3'>
                 <div className='space-y-2'>
                   <Label htmlFor='lastname' className='block text-sm'>
-                    Họ
+                    Last Name
                   </Label>
                   <Input id='lastname' type='text' {...register("lastname")} />
 
@@ -90,7 +90,7 @@ export function SignupForm({
                 </div>
                 <div className='space-y-2'>
                   <Label htmlFor='firstname' className='block text-sm'>
-                    Tên
+                    First Name
                   </Label>
                   <Input
                     id='firstname'
@@ -127,7 +127,7 @@ export function SignupForm({
               {/* Password*/}
               <div className='flex flex-col gap-3'>
                 <Label htmlFor='password' className='block text-sm'>
-                  Mật khẩu
+                  Password
                 </Label>
                 <Input
                   id='password'
@@ -144,7 +144,7 @@ export function SignupForm({
               {/* Confirm Password*/}
               <div className='flex flex-col gap-3'>
                 <Label htmlFor='confirmPassword' className='block text-sm'>
-                   Xác nhận mật khẩu
+                   Confirm Password
                 </Label>
                 <Input
                   id='confirmPassword'
@@ -160,14 +160,14 @@ export function SignupForm({
               </div>
 
               <Button type='submit' className='w-full' disabled={isLoading}>
-                {isLoading ? "Đang xử lý..." : "Tạo tài khoản"}
+                {isLoading ? "Processing..." : "Create account"}
               </Button>
 
               <div className='text-center'>
                 <p className='text-sm text-muted-foreground'>
-                  Bạn đã có tài khoản?{" "}
+                  Already have an account?{" "}
                   <a href='/signin' className='text-primary underline'>
-                    Đăng nhập
+                    Sign in
                   </a>
                 </p>
               </div>
@@ -183,8 +183,8 @@ export function SignupForm({
         </CardContent>
       </Card>
       <div className='text-xs text-balance px-6 text-center *:[a]:hover:text-primary text-muted-foreground *[a]:underline *[a]:underline-offset-4'>
-        Bằng cách tiếp tục, bạn đồng ý với các{" "}
-        <a href='#'>Điều khoản dịch vụ</a> và <a href='#'>Chính sách bảo mật</a>
+        By continuing, you agree to our{" "}
+        <a href='#'>Terms of Service</a> and <a href='#'>Privacy Policy</a>
         .
       </div>
     </div>

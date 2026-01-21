@@ -31,5 +31,10 @@ export const assignmentApi = {
       params: { limit, offset }
     });
     return data;
+  },
+
+  getStudentSubmissions: async (id: string): Promise<any[]> => {
+    const { data } = await apiClient.get<any[]>(`/assignments/${id}/submissions`);
+    return data;
   }
 };

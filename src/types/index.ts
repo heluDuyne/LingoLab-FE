@@ -199,7 +199,17 @@ export interface AssignmentList {
   className?: string; // Added from backend update
   submissionStatus?: string;
   score?: number;
+  averageScore?: number;
   type?: string;
+}
+
+export interface AssignmentStudentSubmissionDTO {
+  learnerId: string;
+  learnerEmail: string;
+  learnerName?: string;
+  status: string;
+  submittedAt?: string;
+  score?: number;
 }
 
 export interface CreateAssignmentData {
@@ -225,10 +235,26 @@ export interface CreatePromptData {
   followUpQuestions?: string;
 }
 
-export interface Prompt {
+export interface AttemptScore {
   id: string;
-  skillType: SkillType;
-  content: string;
-  difficulty: DifficultyLevel;
-  // ... other fields if needed for response
+  fluency: number;
+  pronunciation: number;
+  lexical: number;
+  grammar: number;
+  overallBand: number;
+  feedback: string;
+  detailedFeedback?: any;
 }
+
+export interface AttemptList {
+  id: string;
+  promptId: string;
+  skillType: SkillType;
+  status: string; // 'SUBMITTED', 'SCORED', etc.
+  createdAt: string;
+  submittedAt?: string;
+  deadline?: string;
+  title?: string;
+  score?: AttemptScore;
+}
+

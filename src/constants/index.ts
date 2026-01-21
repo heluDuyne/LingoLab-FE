@@ -39,6 +39,8 @@ export const ROUTES = {
     PROGRESS: "/learner/progress",
     PROFILE: "/learner/profile",
     REPORT_DETAIL: "/learner/report/:submissionId",
+    SPEAKING_EVALUATION: "/learner/speaking-evaluation/:assignmentId",
+    WRITING_EVALUATION: "/learner/writing-evaluation/:assignmentId",
     SETTINGS: "/learner/settings",
   },
 } as const;

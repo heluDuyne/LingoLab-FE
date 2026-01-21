@@ -1,0 +1,375 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router";
+import { ArrowLeft, Clock, Info, Star, Mic, Loader2, Sparkles, CheckCircle2, AlertCircle, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BadgeStatus } from "@/components/ui/badge-status";
+import { ROUTES } from "@/constants";
+import { assignmentApi } from "@/services/api/assignments";
+import { attemptApi } from "@/services/api/attempts";
+import { useAuthStore } from "@/stores";
+
+interface AssignmentUI {
+    id: string;
+    title: string;
+    className: string;
+    type: "WRITING" | "SPEAKING";
+    dueDate: string;
+    description: string;
+    prompt: string;
+    speakingTime?: number; // in seconds
+    tips: string[];
+    promptId?: string;
+}
+
+export function SpeakingEvaluationPage() {
+    const navigate = useNavigate();
+    const { assignmentId } = useParams();
+    const { user } = useAuthStore();
+    const [loading, setLoading] = useState(true);
+    
+    const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
+
+    const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<any>(null);
+    const [existingAudioUrl, setExistingAudioUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchAssignment = async () => {
+            if (!assignmentId || !user?.id) return;
+            try {
+                const data = await assignmentApi.getAssignmentById(assignmentId) as any;
+
+                // Transform API data to UI model
+                setAssignment({
+                    id: data.id,
+                    title: data.title,
+                    className: data.class?.name || "Class",
+                    type: "SPEAKING",
+                    dueDate: data.deadline.toString(),
+                    description: data.description || "No description provided.",
+                    prompt: data.prompt?.content || "No prompt content",
+                    speakingTime: 120,
+                    tips: [
+                        "Speak clearly and at a natural pace",
+                        "Try to use a variety of vocabulary",
+                        "Don't worry about small mistakes, focus on communication"
+                    ],
+                    promptId: data.prompt?.id || data.promptId,
+                });
+
+                // Check for score on the assignment object itself (fallback)
+                if (data.score) {
+                     setFeedback({
+                         score: data.score.overallBand || data.score, // Handle object or number
+                         summary: data.score.feedback || "Teacher feedback available.",
+                         details: data.score.detailedFeedback?.note || "",
+                         aiScores: data.score.aiScores || {
+                             fluency: data.score.fluency,
+                             pronunciation: data.score.pronunciation,
+                             lexical: data.score.lexical,
+                             grammar: data.score.grammar,
+                             coherence: data.score.coherence
+                         },
+                         aiEstimatedBand: data.score.detailedFeedback?.overallBand || data.score.overallBand, // Use detailed or top-level as fallback for AI estimate
+                         strengths: data.score.detailedFeedback?.strengths,
+                         weaknesses: data.score.detailedFeedback?.issues, // "issues" mapped to areas for improvement
+                         actions: data.score.detailedFeedback?.actions,
+                         transcript: data.score.detailedFeedback?.transcript || (data.content && !data.content.startsWith("http") ? data.content : null)
+                     });
+                }
+
+                if (data.attemptId) {
+                    setSubmissionStatus(data.submissionStatus || null);
+
+                    try {
+                        const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+                        
+                        if (attemptDetails.status) {
+                            setSubmissionStatus(attemptDetails.status);
+                        }
+
+                        if (attemptDetails.media && attemptDetails.media.length > 0) {
+                            setExistingAudioUrl(attemptDetails.media[0].storageUrl);
+                        } else if (attemptDetails.content) {
+                            setExistingAudioUrl(attemptDetails.content);
+                        }
+
+                        // Prefer attempt score if available (more detailed)
+                        if (attemptDetails.score) {
+                            setFeedback({
+                                score: attemptDetails.score.overallBand,
+                                summary: attemptDetails.score.feedback,
+                                details: attemptDetails.score.detailedFeedback?.note || "",
+                                aiScores: {
+                                    fluency: attemptDetails.score.fluency,
+                                    pronunciation: attemptDetails.score.pronunciation,
+                                    lexical: attemptDetails.score.lexical,
+                                    grammar: attemptDetails.score.grammar,
+                                    coherence: attemptDetails.score.coherence
+                                },
+                                aiEstimatedBand: attemptDetails.score.detailedFeedback?.overallBand || attemptDetails.score.overallBand,
+                                strengths: attemptDetails.score.detailedFeedback?.strengths,
+                                weaknesses: attemptDetails.score.detailedFeedback?.issues,
+                                actions: attemptDetails.score.detailedFeedback?.actions,
+                                transcript: attemptDetails.score.detailedFeedback?.transcript || (attemptDetails.content && !attemptDetails.content.startsWith("http") ? attemptDetails.content : null)
+                            });
+                        }
+                    } catch (err) {
+                        console.error("Failed to fetch attempt details", err);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load assignment", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (user?.id) {
+            fetchAssignment();
+        }
+    }, [assignmentId, user?.id]);
+
+    const handleBack = () => {
+        navigate(ROUTES.LEARNER.DASHBOARD);
+    };
+
+
+
+    const getDaysUntilDue = () => {
+        if (!assignment) return 0;
+        const dueDate = new Date(assignment.dueDate);
+        const now = new Date();
+        return Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+    };
+
+    if (loading) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+            </div>
+        );
+    }
+
+    if (!assignment) {
+        return (
+            <div className="flex h-screen items-center justify-center flex-col gap-4">
+                <p>Assignment not found.</p>
+                <Button onClick={() => navigate(ROUTES.LEARNER.DASHBOARD)}>
+                    Back to Dashboard
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-5xl mx-auto pb-12 animate-in fade-in duration-300">
+            {/* Header */}
+            <div className="flex flex-col gap-4 mb-8">
+                <button
+                    onClick={handleBack}
+                    className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors w-fit"
+                >
+                    <ArrowLeft size={16} />
+                    Back to Dashboard
+                </button>
+
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-purple-100 text-purple-600 p-1 rounded">
+                                <Mic size={16} />
+                            </span>
+                            <p className="text-sm text-slate-500">{assignment.className}</p>
+                        </div>
+                        <h1 className="text-2xl font-bold text-slate-900">
+                            {assignment.title}
+                        </h1>
+                        <div className="flex items-center gap-3 mt-2">
+                            <BadgeStatus variant="info">Speaking Task</BadgeStatus>
+                            {submissionStatus === 'SCORED' && <BadgeStatus variant="success">Graded</BadgeStatus>}
+                            {submissionStatus === 'SUBMITTED' && <BadgeStatus variant="warning">Submitted</BadgeStatus>}
+                            <span className="text-sm text-slate-500 flex items-center gap-1">
+                                <Clock size={14} />
+                                Due in {getDaysUntilDue()} days
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Main Content */}
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+                        {/* 1. Teacher Feedback */}
+                        {/* 1. Teacher Feedback / AI Preliminary Feedback */}
+                        {(['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(submissionStatus || '') || feedback) && (
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between">
+                                    <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                                        <Star className="w-5 h-5 fill-purple-600 text-purple-600" />
+                                        {(submissionStatus === 'SCORED' || submissionStatus === 'scored') ? "Teacher Feedback" : "Submission Status"}
+                                    </h3>
+                                    <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-purple-100">
+                                        <span className="text-xs uppercase font-bold text-purple-400 mr-2">Band Score</span>
+                                        <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
+                                    </div>
+                                </div>
+                                <div className="p-6">
+                                    <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
+                                    <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                        {feedback?.summary || "No comments provided."}
+                                    </p>
+                                    {feedback?.details && (
+                                        <p className="text-slate-500 text-sm mt-4 italic border-t border-slate-100 pt-4">
+                                            {feedback.details}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 2. AI Evaluation Breakdown */}
+                        {(['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(submissionStatus || '') || feedback?.aiScores) && (
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden border-t-4 border-t-purple-600">
+                                <div className="bg-white p-4 border-b border-slate-100 flex items-center gap-2">
+                                     <Sparkles className="w-5 h-5 text-purple-600 fill-purple-100" />
+                                     <h3 className="font-bold text-slate-900">AI Evaluation</h3>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    {/* Scores & Band */}
+                                    <div className="bg-purple-50 rounded-xl p-5 border border-purple-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <div className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Estimated Band</div>
+                                            <div className="text-4xl font-black text-purple-700 leading-none">{feedback?.aiEstimatedBand || "N/A"}</div>
+                                        </div>
+                                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {feedback?.aiScores && Object.entries(feedback.aiScores).map(([key, value]) => {
+                                                if (value === undefined || value === null) return null;
+                                                return (
+                                                    <div key={key} className="text-center">
+                                                        <span className="block text-xs text-slate-500 uppercase font-bold">{key}</span>
+                                                        <span className="block font-bold text-slate-900">{Number(value).toFixed(1)}</span>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Detailed Feedback Sections */}
+                                    {feedback?.aiScores ? (
+                                        <div className="space-y-6">
+                                            {/* Strengths */}
+                                            <div className="space-y-2">
+                                                <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                                                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                                    Strengths
+                                                </h4>
+                                                <div className="text-sm text-slate-600 bg-green-50/50 p-3 rounded-md border border-green-100">
+                                                    {feedback?.strengths || "No specific strengths analysis available."}
+                                                </div>
+                                            </div>
+
+                                            {/* Areas for Improvement */}
+                                            <div className="space-y-2">
+                                                <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                                                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                                                    Areas for Improvement
+                                                </h4>
+                                                <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded-md border border-amber-100">
+                                                    {feedback?.weaknesses || "No specific issues analysis available."}
+                                                </div>
+                                            </div>
+
+                                            {/* Recommended Actions */}
+                                            <div className="space-y-2">
+                                                <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                                                    <Sparkles className="w-4 h-4 text-purple-500" />
+                                                    Recommended Actions
+                                                </h4>
+                                                <div className="text-sm text-slate-600 bg-purple-50/50 p-3 rounded-md border border-purple-100 italic">
+                                                    {feedback?.actions || "No specific actions available."}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-6 text-slate-500 italic">
+                                            <p>AI processing in progress or no detailed scores available.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 3. Your Response (Review) */}
+                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <Mic size={18} className="text-slate-500" />
+                                Your Response
+                            </h3>
+                            {existingAudioUrl ? (
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <audio controls src={existingAudioUrl} className="w-full" />
+                                </div>
+                            ) : (
+                                <p className="text-slate-500 italic">No audio recording found.</p>
+                            )}
+                        </div>
+
+
+                        {/* 4. Automated Transcription */}
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                            <div className="bg-white border-b border-slate-100 pb-4 pt-5 px-6 flex flex-row items-center justify-between">
+                                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-purple-600" />
+                                    Automated Transcription
+                                </h3>
+                            </div>
+                            <div className="p-6">
+                                <div className="max-h-[400px] overflow-y-auto p-4 space-y-6 bg-slate-50/50 rounded-lg border border-slate-100">
+                                    {feedback?.transcript ? (
+                                        <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                            {feedback.transcript}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-6 text-slate-400 italic">No transcription available.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sidebar */}
+                <div className="space-y-6">
+                    {/* Task Description */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                            <Info size={18} className="text-purple-600" />
+                            Task Description
+                        </h3>
+                        <p className="text-slate-600 text-sm leading-relaxed">
+                            {assignment.description}
+                        </p>
+                    </div>
+
+                    {/* Tips */}
+                    <div className="bg-purple-50 rounded-xl border border-purple-100 p-6">
+                        <h3 className="text-lg font-bold text-slate-900 mb-3">
+                            💡 Speaking Tips
+                        </h3>
+                        <ul className="space-y-2 text-sm text-slate-600">
+                            {assignment.tips.map((tip, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                    <span className="text-purple-600">•</span>
+                                    {tip}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}

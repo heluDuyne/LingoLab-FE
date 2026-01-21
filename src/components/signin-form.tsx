@@ -14,8 +14,8 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 const signInSchema = z.object({
-  email: z.string().email({ message: "Email không hợp lệ" }),
-  password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" }),
+  email: z.string().email({ message: "Invalid email" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
 });
 
 type SignInFormValues = z.infer<typeof signInSchema>;
@@ -46,7 +46,7 @@ export function SigninForm({
       // Get user role from store after login
       const user = useAuthStore.getState().user;
 
-      toast.success("Đăng nhập thành công!");
+      toast.success("Login successful!");
 
       // Navigate based on role
       if (user?.role === "teacher") {
@@ -60,7 +60,7 @@ export function SigninForm({
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Đăng nhập thất bại"
+        error instanceof Error ? error.message : "Login failed"
       );
     }
   };
@@ -76,9 +76,9 @@ export function SigninForm({
                 <a href='/' className='mx-auto block w-fit text-center'>
                   <img src='/logo.svg' alt='logo' />
                 </a>
-                <h1 className='text-2xl font-bold'>Đăng nhập</h1>
+                <h1 className='text-2xl font-bold'>Sign In</h1>
                 <p className='text-muted-foreground text-balance'>
-                  Đăng nhập để tiếp tục sử dụng dịch vụ
+                  Login to continue using our services
                 </p>
               </div>
               {/* Username*/}
@@ -104,13 +104,13 @@ export function SigninForm({
               {/* Password*/}
               <div className='flex flex-col gap-3'>
                 <Label htmlFor='password' className='block text-sm'>
-                  Mật khẩu
+                  Password
                 </Label>
                 <div className='relative'>
                   <Input
                     id='password'
                     type={showPassword ? "text" : "password"}
-                    placeholder='Mật khẩu'
+                    placeholder='Password'
                     {...register("password")}
                     className='pr-10'
                   />
@@ -138,14 +138,14 @@ export function SigninForm({
               </div>
 
               <Button type='submit' className='w-full' disabled={isLoading}>
-                {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
+                {isLoading ? "Logging in..." : "Login"}
               </Button>
 
               <div className='text-center'>
                 <p className='text-sm text-muted-foreground'>
-                  Chưa có tài khoản?{" "}
+                  Don't have an account?{" "}
                   <a href='/signup' className='text-primary underline'>
-                    Đăng ký
+                    Sign up
                   </a>
                 </p>
               </div>
@@ -161,8 +161,8 @@ export function SigninForm({
         </CardContent>
       </Card>
       <div className='text-xs text-balance px-6 text-center *:[a]:hover:text-primary text-muted-foreground *[a]:underline *[a]:underline-offset-4'>
-        Bằng cách tiếp tục, bạn đồng ý với các{" "}
-        <a href='#'>Điều khoản dịch vụ</a> và <a href='#'>Chính sách bảo mật</a>
+        By continuing, you agree to our{" "}
+        <a href='#'>Terms of Service</a> and <a href='#'>Privacy Policy</a>
         .
       </div>
     </div>

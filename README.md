@@ -1,73 +1,89 @@
-# React + TypeScript + Vite
+# LingoLab Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+LingoLab is a comprehensive language learning platform designed to facilitate interaction between teachers and students. It features advanced tools for assigning and grading speaking and writing tasks, tracking student progress, and managing classes effectively.
 
-Currently, two official plugins are available:
+This repository contains the frontend application built with React, TypeScript, and Vite.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🚀 Features
 
-## React Compiler
+### For Students
+- **Interactive Dashboard**: Overview of assigned tasks and recent activity.
+- **Assignments**: Dedicated interfaces for completing Speaking and Writing tasks.
+- **Progress Tracking**: View detailed reports and track learning progress over time.
+- **Profile Management**: Manage personal information and settings.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### For Teachers
+- **Class Management**: specific tools to organize classes and manage student enrollments.
+- **Task Creation**: Create and assign speaking and writing tasks with custom prompts.
+- **Grading Interface**: Efficient tools for reviewing submissions and providing feedback.
+- **Analytics & Reports**: detailed insights into student performance and class progress.
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Framework**: [React](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Shadcn UI](https://ui.shadcn.com/)
+- **State Management**: [Zustand](https://zustand-demo.pmnd.rs/)
+- **Routing**: [React Router](https://reactrouter.com/)
+- **Form Handling**: [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
+- **Icons**: [Lucide React](https://lucide.dev/)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 📦 Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Prerequisites
+- Node.js (v18 or higher recommended)
+- npm or yarn
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   ```
+
+2. Navigate to the project directory:
+   ```bash
+   cd lingolab_frontend
+   ```
+
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+## 💻 Usage
+
+### Development Server
+To start the development server with Hot Module Replacement (HMR):
+```bash
+npm run dev
+```
+The application will be available at `http://localhost:5173`.
+
+### Production Build
+To build the application for production:
+```bash
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Preview Production Build
+To preview the production build locally:
+```bash
+npm run preview
 ```
+
+### Linting
+To run the linter:
+```bash
+npm run lint
+```
+
+## 📂 Project Structure
+
+- `src/components`: Reusable UI components.
+- `src/pages`: Application views (split into `student` and `teacher` directories).
+- `src/services`: API service integrations.
+- `src/stores`: Zustand state management stores.
+- `src/hooks`: Custom React hooks.
+- `src/types`: TypeScript type definitions.
+- `src/lib`: Utility libraries and configurations.
