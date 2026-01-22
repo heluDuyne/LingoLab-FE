@@ -175,18 +175,22 @@ export function WritingGradedTaskPage() {
                             <div className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Estimated Band</div>
                             <div className="text-4xl font-black text-purple-700 leading-none">{attempt.score?.overallBand || "N/A"}</div>
                         </div>
-                        <div className="text-right space-y-1">
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Task Response:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.taskResponse || attempt.score?.taskResponse || "-"}</span>
+                        <div className="space-y-2 min-w-[200px]">
+                            <div className="text-xs text-slate-600 flex justify-between items-start gap-3">
+                                <span className="text-left font-medium leading-tight">Task Response:</span> 
+                                <span className="font-bold text-slate-900 shrink-0">{attempt.score?.detailedFeedback?.aiScores?.taskResponse || attempt.score?.taskResponse || "-"}</span>
                             </div>
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Coherence:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.coherence || attempt.score?.coherence || "-"}</span>
+                            <div className="text-xs text-slate-600 flex justify-between items-start gap-3">
+                                <span className="text-left font-medium leading-tight">Coherence & Cohesion:</span> 
+                                <span className="font-bold text-slate-900 shrink-0">{attempt.score?.detailedFeedback?.aiScores?.coherence || attempt.score?.coherence || "-"}</span>
                             </div>
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Lexical:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.lexical || attempt.score?.lexical || "-"}</span>
+                            <div className="text-xs text-slate-600 flex justify-between items-start gap-3">
+                                <span className="text-left font-medium leading-tight">Lexical Resource:</span> 
+                                <span className="font-bold text-slate-900 shrink-0">{attempt.score?.detailedFeedback?.aiScores?.lexical || attempt.score?.lexical || "-"}</span>
                             </div>
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Grammar:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.grammar || attempt.score?.grammar || "-"}</span>
+                            <div className="text-xs text-slate-600 flex justify-between items-start gap-3">
+                                <span className="text-left font-medium leading-tight">Grammatical Range & Accuracy:</span> 
+                                <span className="font-bold text-slate-900 shrink-0">{attempt.score?.detailedFeedback?.aiScores?.grammar || attempt.score?.grammar || "-"}</span>
                             </div>
                         </div>
                     </div>

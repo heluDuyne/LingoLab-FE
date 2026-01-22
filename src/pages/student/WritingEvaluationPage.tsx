@@ -258,14 +258,19 @@ export function WritingEvaluationPage() {
                                             <div className="text-4xl font-black text-purple-700 leading-none">{feedback?.aiEstimatedBand || "N/A"}</div>
                                         </div>
                                         <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                            {feedback?.aiScores && Object.entries(feedback.aiScores).map(([key, value]) => {
-                                                if (value === undefined || value === null) return null;
+                                            {[
+                                                { key: 'taskResponse', label: 'Task Response' },
+                                                { key: 'coherence', label: 'Coherence & Cohesion' },
+                                                { key: 'lexical', label: 'Lexical Resource' },
+                                                { key: 'grammar', label: 'Grammatical Range & Accuracy' }
+                                            ].map(({ key, label }) => {
+                                                const value = feedback?.aiScores?.[key];
                                                 return (
                                                     <div key={key} className="text-center">
-                                                        <span className="block text-xs text-slate-500 uppercase font-bold">{key}</span>
-                                                        <span className="block font-bold text-slate-900">{typeof value === 'number' ? value.toFixed(1) : String(value)}</span>
+                                                        <span className="block text-[10px] md:text-xs text-slate-500 uppercase font-bold mb-1 h-8 flex items-end justify-center">{label}</span>
+                                                        <span className="block font-bold text-slate-900 text-lg">{typeof value === 'number' ? value.toFixed(1) : (value || "-")}</span>
                                                     </div>
-                                                )
+                                                );
                                             })}
                                         </div>
                                     </div>
