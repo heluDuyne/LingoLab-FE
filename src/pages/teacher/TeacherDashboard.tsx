@@ -8,9 +8,9 @@ import {
   Edit3,
   Trash2,
   Clock,
-  Calendar,
   Upload,
 } from "lucide-react";
+
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ export function TeacherDashboard() {
   const [students, setStudents] = useState<User[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [pendingReviews, setPendingReviews] = useState<any[]>([]); // 3. Change pendingReviews state type
-  const [assignments] = useState([]); // No longer using mockAssignments, keeping it empty for now
+
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
 
   const [assignmentStats, setAssignmentStats] = useState({
@@ -39,7 +39,9 @@ export function TeacherDashboard() {
     pending: 0,
     overdue: 0,
     completionRate: 0,
-    totalExpected: 0
+    totalExpected: 0,
+    speakingAvg: 0,
+    writingAvg: 0
   });
 
   useEffect(() => {
@@ -86,13 +88,29 @@ export function TeacherDashboard() {
               }
           });
 
+          // Calculate Average Grades by Skill
+          const speakingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'SPEAKING' && a.totalScored > 0);
+          const writingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'WRITING' && a.totalScored > 0);
+
+          const calculateWeightedAvg = (tasks: any[]) => {
+               if (tasks.length === 0) return 0;
+               const totalScoreSum = tasks.reduce((sum, t) => sum + (Number(t.averageScore) * t.totalScored), 0);
+               const totalWeight = tasks.reduce((sum, t) => sum + t.totalScored, 0);
+               return totalWeight > 0 ? (totalScoreSum / totalWeight).toFixed(1) : 0;
+          };
+
+          const speakingAvg = calculateWeightedAvg(speakingTasks);
+          const writingAvg = calculateWeightedAvg(writingTasks);
+
           const rate = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
           setAssignmentStats({
               completed,
               pending,
               overdue,
               completionRate: rate,
-              totalExpected
+              totalExpected,
+              speakingAvg: Number(speakingAvg),
+              writingAvg: Number(writingAvg)
           });
           
           // Filter for upcoming deadlines (future dates)
@@ -311,11 +329,7 @@ export function TeacherDashboard() {
                           </div>
                         </td>
                         <td className='px-6 py-4 text-slate-500'>
-                          {
-                            // Placeholder: In real app, we need to fetch enrolled students for each class
-                            // or have student object include enrolledClassIds
-                            "N/A" 
-                          }
+                          {student.enrolledClass || "Not enrolled yet"}
                         </td>
                         <td className='px-6 py-4 text-right'>
                           <div className='flex justify-end items-center gap-2'>
@@ -519,13 +533,23 @@ export function TeacherDashboard() {
                   </p>
                 </CardContent>
               </Card>
-              <Card className='col-span-2 border-slate-200 shadow-sm'>
+              <Card className='border-slate-200 shadow-sm'>
                 <CardContent className='p-4'>
                   <p className='text-sm text-slate-500 font-medium'>
-                    Average Grade
+                    Speaking Avg
                   </p>
-                  <p className='text-2xl font-bold text-emerald-500 mt-1'>
-                    88%
+                  <p className='text-2xl font-bold text-purple-600 mt-1'>
+                    {assignmentStats.speakingAvg > 0 ? assignmentStats.speakingAvg : '--'}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className='border-slate-200 shadow-sm'>
+                <CardContent className='p-4'>
+                  <p className='text-sm text-slate-500 font-medium'>
+                    Writing Avg
+                  </p>
+                  <p className='text-2xl font-bold text-blue-600 mt-1'>
+                    {assignmentStats.writingAvg > 0 ? assignmentStats.writingAvg : '--'}
                   </p>
                 </CardContent>
               </Card>

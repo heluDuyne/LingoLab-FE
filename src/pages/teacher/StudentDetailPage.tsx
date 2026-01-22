@@ -70,7 +70,7 @@ export function StudentDetailPage() {
 
         // Process Stats
         const scoredAttempts = allAttempts.filter((a: any) =>
-            ((a.status?.toUpperCase() === 'SCORED') || (a.status?.toUpperCase() === 'SUBMITTED')) && a.score?.overallBand
+            ((a.status?.toUpperCase() === 'SCORED') || (a.status?.toUpperCase() === 'SUBMITTED')) && a.score?.overallBand != null
         ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         const totalScore = scoredAttempts.reduce((sum: number, a: any) => sum + Number(a.score.overallBand || 0), 0);
@@ -91,7 +91,7 @@ export function StudentDetailPage() {
 
         // Chart Data
         const chart = scoredAttempts.map((a: any) => ({
-             date: new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+             date: new Date(a.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
              score: Number(a.score.overallBand) || 0,
              title: a.title
         }));
@@ -308,7 +308,28 @@ export function StudentDetailPage() {
                         <XAxis dataKey="date" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis domain={[0, 9]} ticks={[0, 2, 4, 6, 8]} stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
                         <Tooltip 
-                            contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E2E8F0' }}
+                            content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                return (
+                                    <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg max-w-[250px]">
+                                        <p className="text-xs text-slate-500 mb-2 border-b border-slate-100 pb-1">{label}</p>
+                                        <div className="space-y-2">
+                                            {payload.map((entry: any, index: number) => (
+                                                <div key={index} className="flex flex-col">
+                                                    <span className="text-xs font-semibold text-slate-900 line-clamp-2 leading-tight">
+                                                        {entry.payload.title}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-purple-600">
+                                                        Score: {entry.value}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                                }
+                                return null;
+                            }}
                         />
                         <Line type="monotone" dataKey="score" stroke="#7C3AED" strokeWidth={3} activeDot={{ r: 6 }} dot={{ r: 3 }} />
                     </LineChart>
@@ -383,7 +404,17 @@ export function StudentDetailPage() {
                           onClick={() => {
                               const isScored = attempt.status?.toUpperCase() === 'SCORED';
                               if (isScored) {
-                                  navigate(`/teacher/graded/${attempt.id}`);
+                                  // Determine type robustly
+                                  const type = attempt.skillType || attempt.type || attempt.assignment?.type || attempt.assignment?.skillType;
+                                  const isSpeaking = type?.toString().toUpperCase() === 'SPEAKING';
+                                  
+                                  if (isSpeaking) {
+                                      console.log("--> StudentDetail: Navigating to SPEAKING graded page");
+                                      navigate(`/teacher/graded/speaking/${attempt.id}`);
+                                  } else {
+                                      console.log("--> StudentDetail: Navigating to WRITING graded page (Default)");
+                                      navigate(`/teacher/graded/${attempt.id}`);
+                                  }
                               } else {
                                   navigate(`/teacher/grading/${attempt.id}`);
                               }
@@ -427,8 +458,8 @@ export function StudentDetailPage() {
                             )}
                           </td>
                           <td className='px-6 py-4 text-right'>
-                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <ArrowRight size={16} className="text-purple-600"/>
+                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-purple-50 text-purple-600 hover:text-purple-700">
+                                <ArrowRight size={16} />
                              </Button>
                           </td>
                         </tr>

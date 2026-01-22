@@ -207,6 +207,14 @@ export function ClassManagementPage() {
               {classStudents.length} Students Enrolled • Code: {selectedClassDetail.code}
             </p>
           </div>
+          <Button
+            onClick={() => navigate(ROUTES.TEACHER.CREATE_TASK, { 
+              state: { classId: selectedClassId, className: selectedClassDetail.name } 
+            })}
+            className='bg-purple-600 hover:bg-purple-700 shadow-sm shadow-purple-200'
+          >
+            <Plus size={18} className='mr-2' /> Create Task
+          </Button>
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>

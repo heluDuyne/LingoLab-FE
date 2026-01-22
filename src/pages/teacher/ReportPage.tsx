@@ -18,9 +18,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants";
 import { assignmentApi } from "@/services/api/assignments";
-import { authApi } from "@/services/api/auth";
+
 import { toast } from "sonner";
-import { type AssignmentList, type AssignmentStudentSubmissionDTO } from "@/types";
+
 
 
 export function ReportPage() {
@@ -40,7 +40,7 @@ export function ReportPage() {
   const fetchAssignments = async () => {
     try {
       setLoading(true);
-      const user = await authApi.getCurrentUser();
+
       // teacherId was unused, used generic teacher endpoint
       const res = await assignmentApi.getTeacherAssignments();
       setAssignments(res.data);
@@ -279,6 +279,7 @@ export function ReportPage() {
                  </tr>
               ) : (
                 filteredAssignments.map((assign) => {
+
                   const completedCount = assign.totalSubmitted || 0;
                   const totalStudents = assign.totalEnrolled || 1; 
                   const percentComplete = totalStudents > 0 
@@ -321,7 +322,7 @@ export function ReportPage() {
                         </span>
                       </td>
                       <td className='px-6 py-4 text-slate-900'>
-                        {new Date(assign.dueDate).toLocaleDateString()}
+                        {new Date(assign.deadline).toLocaleDateString()}
                       </td>
                       <td className='px-6 py-4'>
                         <div className='flex items-center gap-3'>
@@ -375,8 +376,10 @@ export function ReportPage() {
                             <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
                               {isLoadingSubs ? (
                                     <div className='col-span-3 text-center py-4 text-slate-400'>Loading details...</div>
-                              ) : assignSubs.length > 0 ? (
-                                assignSubs.map((sub: any, idx: number) => {
+                              ) : assignSubs.filter((s:any) => s.status?.toLowerCase() === 'scored' || s.score).length > 0 ? (
+                                assignSubs
+                                  .filter((s:any) => s.status?.toLowerCase() === 'scored' || s.score)
+                                  .map((sub: any, idx: number) => {
                                   return (
                                     <div
                                       key={idx}

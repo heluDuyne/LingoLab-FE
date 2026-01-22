@@ -51,6 +51,16 @@ This repository contains the frontend application built with React, TypeScript, 
    npm install
    ```
 
+4. Seed the database (optional):
+   To generate default Teacher and Student accounts for testing:
+   ```bash
+   cd ../lingolab-backend
+   npm run seed
+   ```
+   **Default Credentials:**
+   - Teacher: `teacher@example.com` / `password123`
+   - Student: `student@example.com` / `password123`
+
 ## 💻 Usage
 
 ### Development Server

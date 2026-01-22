@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { Calendar, Search, Upload, X, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,9 @@ import { cn } from "@/lib/utils";
 
 
 
-
 export function CreateTaskPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
 
   // Form State
@@ -39,12 +39,19 @@ export function CreateTaskPage() {
 
   // Scheduling State
   const [dueDate, setDueDate] = useState("");
+  const [deadlineError, setDeadlineError] = useState("");
   
   // Class Selection State
   const [classes, setClasses] = useState<ClassList[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [isClassOpen, setIsClassOpen] = useState(false);
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+
+  // Student Display State (when coming from class context)
+  const [students, setStudents] = useState<any[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [showStudentMode, setShowStudentMode] = useState(false);
+  const [contextClassName, setContextClassName] = useState<string>("");
 
   // File Upload State
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -66,6 +73,41 @@ export function CreateTaskPage() {
     };
     fetchClasses();
   }, [user?.id]);
+
+  // Handle pre-selection from navigation state and fetch students
+  useEffect(() => {
+    const handleClassContext = async () => {
+      if (location.state?.classId && classes.length > 0) {
+        const classId = location.state.classId;
+        const className = location.state.className;
+        
+        if (!selectedClassIds.includes(classId)) {
+          setSelectedClassIds([classId]);
+          setContextClassName(className || "");
+          console.log("Pre-selected class from navigation:", className);
+          
+          // Fetch students for this class
+          setIsLoadingStudents(true);
+          try {
+            const classDetails = await classApi.getClassDetails(classId);
+            setStudents(classDetails.learners || []);
+            setShowStudentMode(true);
+            console.log("Loaded students:", classDetails.learners?.length || 0);
+          } catch (error) {
+            console.error("Failed to fetch students", error);
+            toast.error("Failed to load students");
+          } finally {
+            setIsLoadingStudents(false);
+          }
+        }
+        // Clear the state to prevent re-selection on refresh
+        window.history.replaceState({}, document.title);
+      }
+    };
+    
+    handleClassContext();
+  }, [location.state, classes]);
+
 
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +171,18 @@ export function CreateTaskPage() {
     if (selectedClassIds.length === 0) {
       toast.error("Please select at least one class.");
       return;
+    }
+
+    // Validate deadline is not in the past
+    if (dueDate) {
+      const selected = new Date(dueDate);
+      const now = new Date();
+      
+      if (selected < now) {
+        toast.error("Deadline cannot be in the past. Please select a future date and time.");
+        setDeadlineError("Deadline cannot be in the past");
+        return;
+      }
     }
 
     try {
@@ -460,23 +514,102 @@ export function CreateTaskPage() {
               />
               <input
                 id='dueDate'
-                type='date'
-                className='w-full rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600/50 border border-slate-300 bg-slate-50 focus:border-purple-600 h-14 placeholder:text-slate-400 pl-12 pr-4 text-base'
+                type='datetime-local'
+                className={`w-full rounded-lg text-slate-900 focus:outline-none focus:ring-2 border bg-slate-50 h-14 placeholder:text-slate-400 pl-12 pr-4 text-base ${
+                  deadlineError 
+                    ? 'border-red-300 focus:border-red-600 focus:ring-red-600/50' 
+                    : 'border-slate-300 focus:border-purple-600 focus:ring-purple-600/50'
+                }`}
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e) => {
+                  const selectedDate = e.target.value;
+                  setDueDate(selectedDate);
+                  
+                  // Validate deadline is not in the past
+                  if (selectedDate) {
+                    const selected = new Date(selectedDate);
+                    const now = new Date();
+                    
+                    if (selected < now) {
+                      setDeadlineError("Deadline cannot be in the past");
+                      toast.error("Deadline cannot be in the past");
+                    } else {
+                      setDeadlineError("");
+                    }
+                  } else {
+                    setDeadlineError("");
+                  }
+                }}
               />
             </div>
+            {deadlineError && (
+              <p className="text-sm text-red-600 mt-1">{deadlineError}</p>
+            )}
           </div>
 
           <div className='flex flex-col gap-2'>
-            <Label
-              htmlFor='classSelect'
-              className='text-slate-900 text-base font-medium'
-            >
-              Assign Class(es)
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label
+                htmlFor='classSelect'
+                className='text-slate-900 text-base font-medium'
+              >
+                {showStudentMode ? `Students in ${contextClassName}` : 'Assign Class(es)'}
+              </Label>
+              {showStudentMode && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowStudentMode(false);
+                    setStudents([]);
+                    setSelectedClassIds([]);
+                    setContextClassName("");
+                  }}
+                  className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 h-8"
+                >
+                  Change Class
+                </Button>
+              )}
+            </div>
             
-            {/* Custom Multi-Select Dropdown */}
+            {/* Student List Mode */}
+            {showStudentMode ? (
+              <div className="border border-slate-300 rounded-lg bg-slate-50 p-4">
+                {isLoadingStudents ? (
+                  <p className="text-center text-sm text-slate-500 py-4">Loading students...</p>
+                ) : students.length === 0 ? (
+                  <p className="text-center text-sm text-slate-500 py-4">No students in this class</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-600 mb-3">
+                      This task will be assigned to all {students.length} student{students.length !== 1 ? 's' : ''} in this class:
+                    </p>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {students.map((student) => (
+                        <div
+                          key={student.id}
+                          className="flex items-center gap-3 p-2 bg-white rounded-md border border-slate-200"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-medium text-sm">
+                            {(student.firstName?.[0] || student.email[0]).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">
+                              {student.firstName && student.lastName
+                                ? `${student.firstName} ${student.lastName}`
+                                : student.name || student.email.split('@')[0]}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">{student.email}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+            /* Class Dropdown Mode */
             <div className='relative'>
               <div
                 className='w-full min-h-[56px] px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 focus-within:border-purple-600 focus-within:ring-2 focus-within:ring-purple-600/50 cursor-pointer flex items-center justify-between'
@@ -570,6 +703,7 @@ export function CreateTaskPage() {
                 </>
               )}
             </div>
+            )}
           </div>
         </div>
 

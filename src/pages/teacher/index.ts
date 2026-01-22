@@ -14,3 +14,4 @@ export { GradingPage } from "./GradingPage";
 export * from "./GradingPage";
 export * from "./SpeakingGradingPage";
 export * from "./WritingGradedTaskPage";
+export * from "./SpeakingGradedTaskPage";

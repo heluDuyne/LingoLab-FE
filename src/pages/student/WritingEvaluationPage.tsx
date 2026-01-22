@@ -55,32 +55,10 @@ export function WritingEvaluationPage() {
                     promptId: data.prompt?.id || data.promptId,
                 });
 
-                // Check for score on the assignment object itself (fallback)
-                if (data.score) {
-                     setFeedback({
-                         score: data.score.overallBand || data.score, // Handle object or number
-                         summary: data.score.feedback || "Teacher feedback available.",
-                         details: data.score.detailedFeedback?.note || "",
-                         aiScores: data.score.aiScores || {
-                             // Default writing metrics if available
-                             taskResponse: data.score.taskResponse,
-                             coherence: data.score.coherence,
-                             lexical: data.score.lexical,
-                             grammar: data.score.grammar
-                         },
-                         aiEstimatedBand: data.score.detailedFeedback?.overallBand || data.score.overallBand, // Use detailed or top-level as fallback for AI estimate
-                         strengths: data.score.detailedFeedback?.strengths,
-                         weaknesses: data.score.detailedFeedback?.issues, // "issues" mapped to areas for improvement
-                         actions: data.score.detailedFeedback?.actions,
-                         gradedByTeacher: data.score.detailedFeedback?.gradedByTeacher
-                     });
-                }
-
-                if (data.attemptId) {
-                    setSubmissionStatus(data.submissionStatus || null);
-
-                    try {
-                        const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
+                // Helper to safely load attempt details
+                const loadAttemptDetails = async (id: string) => {
+                     try {
+                        const attemptDetails = await attemptApi.getAttemptById(id);
                         
                         if (attemptDetails.status) {
                             setSubmissionStatus(attemptDetails.status);
@@ -109,8 +87,51 @@ export function WritingEvaluationPage() {
                                 gradedByTeacher: attemptDetails.score.detailedFeedback?.gradedByTeacher
                             });
                         }
-                    } catch (err) {
+                     } catch (err) {
                         console.error("Failed to fetch attempt details", err);
+                     }
+                };
+
+                // Check for score on the assignment object itself (fallback)
+                if (data.score) {
+                     setFeedback({
+                         score: data.score.overallBand || data.score, // Handle object or number
+                         summary: data.score.feedback || "Teacher feedback available.",
+                         details: data.score.detailedFeedback?.note || "",
+                         aiScores: data.score.aiScores || {
+                             // Default writing metrics if available
+                             taskResponse: data.score.taskResponse,
+                             coherence: data.score.coherence,
+                             lexical: data.score.lexical,
+                             grammar: data.score.grammar
+                         },
+                         aiEstimatedBand: data.score.detailedFeedback?.overallBand || data.score.overallBand,
+                         strengths: data.score.detailedFeedback?.strengths,
+                         weaknesses: data.score.detailedFeedback?.issues, // "issues" mapped to areas for improvement
+                         actions: data.score.detailedFeedback?.actions,
+                         gradedByTeacher: data.score.detailedFeedback?.gradedByTeacher
+                     });
+                }
+
+                if (data.attemptId) {
+                    setSubmissionStatus(data.submissionStatus || null);
+                    await loadAttemptDetails(data.attemptId);
+                } else if (data.prompt?.id || data.promptId) {
+                    // Fallback: Try to find existing attempt via createAttempt
+                    const promptId = data.prompt?.id || data.promptId;
+                    console.log("[WritingEvaluation] No linked attempt. Finding attempt for prompt:", promptId);
+                    
+                    try {
+                        const existingAttempt = await attemptApi.createAttempt({
+                            learnerId: user.id,
+                            promptId: promptId,
+                            assignmentId: assignmentId, // passing assignmentId helps backend validation
+                            skillType: "writing"
+                        });
+                        console.log("[WritingEvaluation] Found attempt:", existingAttempt.id);
+                        await loadAttemptDetails(existingAttempt.id);
+                    } catch (e) {
+                        console.error("Failed to find fallback attempt", e);
                     }
                 }
             } catch (err) {

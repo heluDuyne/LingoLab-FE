@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -53,6 +53,7 @@ export function SpeakingSubmissionPage() {
 
   // Audio playback state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const [assignment, setAssignment] = useState<AssignmentUI | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,6 +140,11 @@ export function SpeakingSubmissionPage() {
     }
   }, [assignmentId, user?.id]);
 
+  // Audio refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
   // Recording timer effect
   useEffect(() => {
     let interval: any;
@@ -146,7 +152,7 @@ export function SpeakingSubmissionPage() {
       interval = setInterval(() => {
         setRecordingTime((prev) => {
           if (prev >= (assignment?.speakingTime || 120)) {
-            setIsRecording(false);
+            stopRecording();
             return prev;
           }
           return prev + 1;
@@ -155,6 +161,23 @@ export function SpeakingSubmissionPage() {
     }
     return () => clearInterval(interval);
   }, [isRecording, assignment?.speakingTime]);
+
+  // Create and cleanup audio URL for preview
+  useEffect(() => {
+    if (audioFile) {
+      const url = URL.createObjectURL(audioFile);
+      setAudioUrl(url);
+      console.log("Audio preview URL created:", url);
+      
+      // Cleanup function
+      return () => {
+        URL.revokeObjectURL(url);
+        setAudioUrl(null);
+      };
+    } else {
+      setAudioUrl(null);
+    }
+  }, [audioFile]);
 
   const maxRecordingTime = assignment?.speakingTime || 120;
   const isReadOnly = ['SUBMITTED', 'SCORED', 'submitted', 'scored'].includes(submissionStatus || '');
@@ -166,19 +189,92 @@ export function SpeakingSubmissionPage() {
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0 ")}:${secs.toString().padStart(2, "0")}`;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const startRecording = async () => {
+    try {
+      // Request audio with specific constraints
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        } 
+      });
+      
+      console.log("Audio stream obtained:", stream);
+      console.log("Audio tracks:", stream.getAudioTracks());
+      console.log("Audio track settings:", stream.getAudioTracks()[0]?.getSettings());
+      
+      // Check if we have audio tracks
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        alert("No audio input detected. Please check your microphone.");
+        return;
+      }
+      
+      console.log("Audio track enabled:", audioTracks[0].enabled);
+      console.log("Audio track muted:", audioTracks[0].muted);
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      console.log("MediaRecorder created with MIME type:", mediaRecorder.mimeType);
+      
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          console.log("Audio chunk received, size:", event.data.size);
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        console.log("Recording stopped. Blob size:", audioBlob.size, "Type:", audioBlob.type);
+        console.log("Number of chunks:", audioChunksRef.current.length);
+        
+        if (audioBlob.size === 0) {
+            console.error("Recorded blob is empty!");
+            alert("Recording failed: No audio captured. Please check your microphone.");
+            return;
+        }
+
+        // Create WebM file (will be converted to MP3 by Cloudinary/backend)
+        const file = new File([audioBlob], "recording.webm", { type: 'audio/webm' });
+        setAudioFile(file);
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => {
+          console.log("Stopping track:", track.kind, track.label);
+          track.stop();
+        });
+      };
+
+      mediaRecorder.start();
+      console.log("Recording started");
+      setRecordingTime(0);
+      setIsRecording(true);
+      setAudioFile(null);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("Could not access microphone. Please allow permissions and check your microphone is connected.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
   };
 
   const toggleRecording = () => {
     if (isRecording) {
-      // Stop recording
-      setIsRecording(false);
-      // In a real app, this would save the recorded audio
+      stopRecording();
     } else {
-      // Start recording
-      setRecordingTime(0);
-      setIsRecording(true);
-      setAudioFile(null);
+      startRecording();
     }
   };
 
@@ -354,29 +450,74 @@ export function SpeakingSubmissionPage() {
             existingAudioUrl={existingAudioUrl}
             formatTime={formatTime}
           />
-              {/* Recording Status ... */}
+              {/* Recording Status with Preview */}
               {hasRecording && (
                 <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-3">
-                     {/* ... (icon) */}
                     <div>
                       <p className="font-medium text-slate-900">
-                        {audioFile ? "Audio file uploaded" : "Recording complete"}
+                        {audioFile ? "Recording ready" : "Recording complete"}
                       </p>
                       <p className="text-sm text-slate-500">
                         Duration: {formatTime(recordingTime)}
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => setIsPlaying(!isPlaying)}
-                  >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                    {isPlaying ? "Pause" : "Preview"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => {
+                        const audio = audioPreviewRef.current;
+                        console.log("Preview clicked. Audio element:", audio);
+                        console.log("Audio URL:", audioUrl);
+                        console.log("Is playing:", isPlaying);
+                        
+                        if (audio && audioUrl) {
+                          console.log("Audio element ready state:", audio.readyState);
+                          console.log("Audio element paused:", audio.paused);
+                          console.log("Audio element duration:", audio.duration);
+                          console.log("Audio element volume:", audio.volume);
+                          console.log("Audio element muted:", audio.muted);
+                          
+                          if (isPlaying) {
+                            console.log("Pausing audio...");
+                            audio.pause();
+                          } else {
+                            console.log("Playing audio...");
+                            audio.play().then(() => {
+                              console.log("Audio playback started successfully");
+                            }).catch(err => {
+                              console.error("Audio playback failed:", err);
+                              alert("Failed to play audio. Please try recording again.");
+                            });
+                          }
+                        } else {
+                          console.warn("Audio preview not ready", { audio, audioUrl });
+                          alert("Audio preview not ready. Please wait a moment and try again.");
+                        }
+                      }}
+                    >
+                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      {isPlaying ? "Pause" : "Preview"}
+                    </Button>
+                  </div>
+                  {/* Hidden audio element for preview */}
+                  {audioUrl && (
+                    <audio
+                      ref={audioPreviewRef}
+                      src={audioUrl}
+                      onEnded={() => setIsPlaying(false)}
+                      onPause={() => setIsPlaying(false)}
+                      onPlay={() => setIsPlaying(true)}
+                      onError={(e) => {
+                        console.error("Audio element error:", e);
+                        alert("Audio playback error. The recording may be corrupted.");
+                      }}
+                      className="hidden"
+                    />
+                  )}
                 </div>
               )}
 

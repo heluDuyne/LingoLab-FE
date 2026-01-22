@@ -14,6 +14,7 @@ export interface User {
   phone?: string;
   location?: string;
   bio?: string;
+  enrolledClass?: string;
 }
 
 // ...
@@ -177,6 +178,8 @@ export interface Assignment {
     id: string;
     name: string;
   };
+  type?: string;
+  skillType?: string;
   prompt?: {
     id: string;
     title: string;
@@ -184,6 +187,12 @@ export interface Assignment {
     content?: string;
   };
   attemptId?: string;
+  totalEnrolled?: number;
+  totalSubmitted?: number;
+  totalScored?: number;
+  averageScore?: number;
+  allowLateSubmission?: boolean;
+  lateDeadline?: string;
 }
 
 export interface AssignmentList {

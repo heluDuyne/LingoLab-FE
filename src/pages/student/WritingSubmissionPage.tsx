@@ -77,42 +77,49 @@ export function WritingSubmissionPage() {
             wordLimit: { min: 40, max: 400 },
         });
 
+        // Helper to load attempt details
+        const loadAttemptDetails = async (id: string) => {
+            console.log("Loading attempt details for:", id);
+            try {
+                const attemptDetails = await attemptApi.getAttemptById(id);
+                console.log("DEBUG: Attempt Details from Backend:", attemptDetails); 
+                
+                setAttemptId(id); // Ensure attemptId state is set
+                if (attemptDetails.status) setSubmissionStatus(attemptDetails.status);
+                if (attemptDetails.content) setText(attemptDetails.content);
+                
+                // Set feedback if available
+                if (attemptDetails.score) {
+                     setFeedback({
+                         score: attemptDetails.score.overallBand,
+                         summary: attemptDetails.score.feedback,
+                         details: attemptDetails.score.detailedFeedback?.note || ""
+                     });
+                }
+            } catch (e) {
+                console.error("Failed to load attempt details", e);
+            }
+        };
+
         // Handle attempt creation/retrieval
         if (data.attemptId) {
-            console.log("Found existing attempt:", data.attemptId);
-            setAttemptId(data.attemptId);
-            setSubmissionStatus(data.submissionStatus || null);
-            
-            // If submitted, load the content (assuming getAssignmentById might not return content, verification needed)
-            // For now, if we have attemptId, we should fetch attempt details to get the content
-            // If submitted, load the content
-            const attemptDetails = await attemptApi.getAttemptById(data.attemptId);
-            console.log("DEBUG: Attempt Details from Backend:", attemptDetails); // Debug log
-            setText(attemptDetails.content || "");
-            
-            // Set feedback if available
-            if (attemptDetails.score) {
-                 setFeedback({
-                     score: attemptDetails.score.overallBand,
-                     summary: attemptDetails.score.feedback,
-                     // If we have detailed feedback from AI/Teacher, we can map it here. 
-                     // For now, let's map feedback string to summary.
-                     details: attemptDetails.score.detailedFeedback?.note || ""
-                 });
-            }
-            // Removing Mock Feedback Block
-            
+            console.log("Found existing attempt linked to assignment:", data.attemptId);
+            await loadAttemptDetails(data.attemptId);
         } else if (data.prompt?.id || data.promptId) {
              const promptId = data.prompt?.id || data.promptId;
-             console.log("Creating new attempt for prompt:", promptId);
+             console.log("No attempt linked. creating/finding attempt for prompt:", promptId);
+             
+             // createAttempt will return existing attempt if one exists for this user+prompt+assignment
              const newAttempt = await attemptApi.createAttempt({
                 learnerId: user.id,
                 promptId: promptId,
                 assignmentId: assignmentId,
                 skillType: "writing"
             });
-            console.log("Created new attempt:", newAttempt);
-            setAttemptId(newAttempt.id);
+            console.log("createAttempt response (New or Existing):", newAttempt);
+            
+            // Allow time for backend reference to settle or just load details directly
+            await loadAttemptDetails(newAttempt.id);
         } else {
             console.warn("No attempt found and no prompt ID available to create one.");
         }
@@ -182,6 +189,17 @@ export function WritingSubmissionPage() {
         }
     } catch (err: any) {
         console.error("Submission failed", err);
+        // Handle "Already submitted" gracefully
+        if (err.response?.status === 400 && (err.response?.data?.message?.includes("already been submitted") || err.message?.includes("already been submitted"))) {
+             toast.success("Submission successful! (Already recorded)");
+             if (assignmentId) {
+                navigate(ROUTES.LEARNER.WRITING_EVALUATION.replace(':assignmentId', assignmentId));
+             } else {
+                navigate(ROUTES.LEARNER.DASHBOARD);
+             }
+             return;
+        }
+
         const errorMessage = err.message || "Failed to submit. Please try again.";
         setError(errorMessage);
         toast.error(errorMessage);

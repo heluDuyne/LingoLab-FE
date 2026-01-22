@@ -30,6 +30,11 @@ export function StudentDashboard() {
 
         setAssignments(assignmentsRes.data);
         setRecentActivity(activityRes.data || []);
+        
+        console.log("Dashboard Loaded - Assignments:", assignmentsRes.data);
+        assignmentsRes.data.forEach((a: any) => {
+             console.log(`Task: ${a.title} | Status: ${a.submissionStatus} | Score: ${a.score} | AttemptID: ${a.attemptId}`);
+        });
       } catch (error) {
         console.error("Failed to load dashboard data", error);
       } finally {
@@ -43,9 +48,24 @@ export function StudentDashboard() {
 
   // Filter assignments based on selected tab
   const filteredAssignments = assignments.filter((assignment) => {
-    if (taskFilter === "TODO") return !assignment.submissionStatus || assignment.submissionStatus === "PENDING";
-    if (taskFilter === "SUBMITTED") return (assignment.submissionStatus && assignment.submissionStatus !== "PENDING") && !assignment.score;
-    if (taskFilter === "SCORED") return (assignment.submissionStatus === "SCORED" || assignment.submissionStatus === "GRADED") || (assignment.score !== undefined && assignment.score !== null);
+    const status = assignment.submissionStatus?.toLowerCase();
+    const hasScore = assignment.score !== undefined && assignment.score !== null;
+
+    if (taskFilter === "TODO") {
+        return !status || status === "pending" || status === "in_progress";
+    }
+
+    if (taskFilter === "SUBMITTED") {
+        // Submitted means waiting for score. 
+        // Explicitly exclude 'scored' status to prevent overlap.
+        return status === "submitted" && !hasScore;
+    }
+
+    if (taskFilter === "SCORED") {
+        // Scored means it has a final status OR has a score value
+        return status === "scored" || status === "graded" || hasScore;
+    }
+
     return true;
   });
 

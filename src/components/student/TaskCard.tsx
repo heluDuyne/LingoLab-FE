@@ -51,8 +51,12 @@ export function TaskCard({
           </h3>
 
           <div className="flex items-center gap-3 mt-2">
-            {isGraded && score !== undefined ? (
-              <BadgeStatus variant="success">Score: {score}/9.0</BadgeStatus>
+            {isGraded ? (
+              score !== undefined ? (
+                <BadgeStatus variant="success">Score: {score}/9.0</BadgeStatus>
+              ) : (
+                <BadgeStatus variant="success">Graded</BadgeStatus>
+              )
             ) : isSubmitted ? (
               <BadgeStatus variant="warning">Submitted</BadgeStatus>
             ) : (

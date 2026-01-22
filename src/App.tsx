@@ -23,6 +23,7 @@ import {
   GradingPage,
   SpeakingGradingPage,
   WritingGradedTaskPage,
+  SpeakingGradedTaskPage,
 } from "@/pages/teacher";
 
 // Student pages
@@ -76,6 +77,7 @@ function App() {
             <Route path="grading/:attemptId" element={<GradingPage />} />
             <Route path="grading/speaking/:attemptId" element={<SpeakingGradingPage />} />
             <Route path="graded/:attemptId" element={<WritingGradedTaskPage />} />
+            <Route path="graded/speaking/:attemptId" element={<SpeakingGradedTaskPage />} />
             {/* Add more teacher routes here:
             <Route path="settings" element={<TeacherSettings />} />
             */}
