@@ -229,6 +229,27 @@ export function WritingEvaluationPage() {
                                         <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
                                     </div>
                                 </div>
+                                
+                                {/* Criteria Breakdown */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-6 pt-6 pb-2 border-b border-slate-100">
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Task Response</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.aiScores?.taskResponse ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Coherence</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.aiScores?.coherence ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Lexical</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.aiScores?.lexical ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Grammar</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.aiScores?.grammar ?? "-"}</span>
+                                    </div>
+                                </div>
+
                                 <div className="p-6">
                                     <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
                                     <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">

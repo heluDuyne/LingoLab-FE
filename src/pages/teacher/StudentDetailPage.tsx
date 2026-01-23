@@ -49,7 +49,8 @@ export function StudentDetailPage() {
       speakingAvg: "0.0"
   });
   const [chartData, setChartData] = useState<any[]>([]);
-  const [skillData, setSkillData] = useState<any[]>([]);
+  const [speakingData, setSpeakingData] = useState<any[]>([]);
+  const [writingData, setWritingData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchStudentData = async () => {
@@ -97,36 +98,57 @@ export function StudentDetailPage() {
         }));
         setChartData(chart);
 
-        // Skill Radar Data (Similar logic to ProgressPage)
-         const skillAgg = {
-             fluency: 0, pronunciation: 0, lexical: 0, grammar: 0, coherence: 0, count: 0
-         };
+        // --- Aggregation Logic ---
+        const aggregateSkills = (skillAttempts: any[], type: 'speaking' | 'writing') => {
+             const agg = {
+                 cat1: 0, cat2: 0, cat3: 0, cat4: 0, count: 0
+             };
 
-         scoredAttempts.forEach((a: any) => {
-             const base = Number(a.score.overallBand) || 6.0;
-             skillAgg.fluency += (a.score.fluency || base);
-             skillAgg.pronunciation += (a.score.pronunciation || base);
-             skillAgg.lexical += (a.score.lexical || base);
-             skillAgg.grammar += (a.score.grammar || base);
-             skillAgg.count++;
-         });
-         
-         if (skillAgg.count > 0) {
-            setSkillData([
-                { subject: 'Fluency', A: (skillAgg.fluency / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Pronunciation', A: (skillAgg.pronunciation / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Lexical', A: (skillAgg.lexical / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Grammar', A: (skillAgg.grammar / skillAgg.count).toFixed(1), fullMark: 9 },
-            ]);
-        } else {
-             // DefaultEmpty
-             setSkillData([
-                { subject: 'Fluency', A: 0, fullMark: 9 },
-                { subject: 'Pronunciation', A: 0, fullMark: 9 },
-                { subject: 'Lexical', A: 0, fullMark: 9 },
-                { subject: 'Grammar', A: 0, fullMark: 9 },
-            ]);
-        }
+             skillAttempts.forEach(a => {
+                 if (!a.score) return;
+                 const aiScores = a.score.detailedFeedback?.aiScores || {};
+                 const rootScores = a.score;
+                 const base = Number(rootScores.overallBand) || 0; 
+
+                 let c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+
+                 if (type === 'speaking') {
+                     // Fluency, Pronunciation, Lexical, Grammar
+                     c1 = Number(aiScores.fluency || rootScores.fluency || base);
+                     c2 = Number(aiScores.pronunciation || rootScores.pronunciation || base);
+                     c3 = Number(aiScores.lexical || rootScores.lexical || base);
+                     c4 = Number(aiScores.grammar || rootScores.grammar || base);
+                 } else {
+                     // Task Response, Coherence, Lexical, Grammar
+                     c1 = Number(aiScores.taskResponse || rootScores.fluency || base); 
+                     c2 = Number(aiScores.coherence || rootScores.pronunciation || base);
+                     c3 = Number(aiScores.lexical || rootScores.lexical || base);
+                     c4 = Number(aiScores.grammar || rootScores.grammar || base);
+                 }
+
+                 agg.cat1 += c1;
+                 agg.cat2 += c2;
+                 agg.cat3 += c3;
+                 agg.cat4 += c4;
+                 agg.count++;
+             });
+
+             if (agg.count === 0) return [];
+
+             const labels = type === 'speaking' 
+                ? ['Fluency', 'Pronunciation', 'Lexical', 'Grammar']
+                : ['Task Response', 'Coherence', 'Lexical', 'Grammar'];
+            
+             return [
+                 { subject: labels[0], A: (agg.cat1 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[1], A: (agg.cat2 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[2], A: (agg.cat3 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[3], A: (agg.cat4 / agg.count).toFixed(1), fullMark: 9 },
+             ];
+        };
+
+        setSpeakingData(aggregateSkills(speakingAttempts, 'speaking'));
+        setWritingData(aggregateSkills(writingAttempts, 'writing'));
 
 
       } catch (err) {
@@ -273,21 +295,49 @@ export function StudentDetailPage() {
             </div>
           </div>
 
-           {/* Skills Radar */}
+           {/* Speaking Skills Radar */}
            <div className='bg-white rounded-xl border border-slate-200 p-4 shadow-sm min-h-[300px] flex flex-col'>
              <h3 className='text-sm font-bold text-slate-900 mb-2 flex items-center gap-2'>
-                <Brain size={16} className="text-purple-600"/>
-                Skill Analysis
+                <Mic size={16} className="text-purple-600"/>
+                Speaking Skills
              </h3>
              <div className="flex-1 w-full flex items-center justify-center -ml-4">
-                 <ResponsiveContainer width="100%" height={250}>
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={skillData}>
-                        <PolarGrid stroke="#E2E8F0" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748B', fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 9]} tickCount={4} tick={false} />
-                        <Radar name="Student" dataKey="A" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} />
-                    </RadarChart>
-                 </ResponsiveContainer>
+                 {speakingData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={250}>
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={speakingData}>
+                            <PolarGrid stroke="#E2E8F0" />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748B', fontSize: 10 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 9]} tickCount={4} tick={false} />
+                            <Radar name="Student" dataKey="A" stroke="#9333ea" fill="#9333ea" fillOpacity={0.5} />
+                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
+                        </RadarChart>
+                    </ResponsiveContainer>
+                 ) : (
+                    <p className="text-slate-400 text-sm">No speaking data available.</p>
+                 )}
+             </div>
+           </div>
+
+           {/* Writing Skills Radar */}
+           <div className='bg-white rounded-xl border border-slate-200 p-4 shadow-sm min-h-[300px] flex flex-col'>
+             <h3 className='text-sm font-bold text-slate-900 mb-2 flex items-center gap-2'>
+                <FileText size={16} className="text-blue-600"/>
+                Writing Skills
+             </h3>
+             <div className="flex-1 w-full flex items-center justify-center -ml-4">
+                 {writingData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={250}>
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={writingData}>
+                            <PolarGrid stroke="#E2E8F0" />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748B', fontSize: 10 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 9]} tickCount={4} tick={false} />
+                            <Radar name="Student" dataKey="A" stroke="#2563eb" fill="#2563eb" fillOpacity={0.5} />
+                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
+                        </RadarChart>
+                    </ResponsiveContainer>
+                 ) : (
+                    <p className="text-slate-400 text-sm">No writing data available.</p>
+                 )}
              </div>
            </div>
 

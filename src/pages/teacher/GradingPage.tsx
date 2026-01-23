@@ -17,6 +17,17 @@ export function GradingPage() {
   const [score, setScore] = useState("");
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [criteria, setCriteria] = useState<{
+        taskResponse: string; 
+        coherence: string; 
+        lexical: string; 
+        grammar: string;
+  }>({
+      taskResponse: "", 
+      coherence: "", 
+      lexical: "", 
+      grammar: ""
+  });
 
   useEffect(() => {
     if (attemptId) {
@@ -37,13 +48,43 @@ export function GradingPage() {
     }
   };
 
+  useEffect(() => {
+      if (attempt?.score?.detailedFeedback?.gradedByTeacher) {
+        const s = attempt.score;
+        setCriteria({
+            taskResponse: (s.taskResponse ?? s.overallBand ?? "").toString(),
+            coherence: (s.coherence ?? s.overallBand ?? "").toString(),
+            lexical: (s.lexical ?? s.overallBand ?? "").toString(),
+            grammar: (s.grammar ?? s.overallBand ?? "").toString()
+        });
+        setScore(s.overallBand?.toString() || "");
+        setFeedback(s.feedback || "");
+      }
+  }, [attempt]);
+
+  useEffect(() => {
+      const values = Object.values(criteria).map(v => parseFloat(v)).filter(v => !isNaN(v));
+      if (values.length === 4) {
+          const sum = values.reduce((a, b) => a + b, 0);
+          const avg = sum / 4;
+          const rounded = Math.round(avg * 2) / 2;
+          setScore(rounded.toString());
+      }
+  }, [criteria]);
+
+  const handleCriteriaChange = (field: keyof typeof criteria, value: string) => {
+      if (value === "" || (parseFloat(value) >= 0 && parseFloat(value) <= 9)) {
+        setCriteria(prev => ({ ...prev, [field]: value }));
+      }
+  };
+
   const handleSubmit = async () => {
     if (!attemptId) return;
     
-    // Validate score
+    // Validate score (auto-calculated or manual override if we allowed edit)
     const numScore = parseFloat(score);
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) { 
-        toast.error("Please enter a valid numeric score");
+    if (isNaN(numScore)) { 
+        toast.error("Overall score is invalid. Please check criteria scores.");
         return;
     }
 
@@ -51,7 +92,11 @@ export function GradingPage() {
       setIsSubmitting(true);
       await attemptApi.gradeAttempt(attemptId, {
           score: numScore,
-          feedback: feedback
+          feedback: feedback,
+          taskResponse: parseFloat(criteria.taskResponse) || 0,
+          coherence: parseFloat(criteria.coherence) || 0,
+          lexical: parseFloat(criteria.lexical) || 0,
+          grammar: parseFloat(criteria.grammar) || 0
       });
       toast.success("Grading saved successfully!");
       navigate(-1);
@@ -256,18 +301,70 @@ export function GradingPage() {
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
                     
-                    <div className="space-y-2">
+                    {/* Criteria Scores */}
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Task Response</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0 - 9"
+                                    value={criteria.taskResponse}
+                                    onChange={(e) => handleCriteriaChange('taskResponse', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Coherence</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0 - 9"
+                                    value={criteria.coherence}
+                                    onChange={(e) => handleCriteriaChange('coherence', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Lexical Resource</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0 - 9"
+                                    value={criteria.lexical}
+                                    onChange={(e) => handleCriteriaChange('lexical', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Grammar</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0 - 9"
+                                    value={criteria.grammar}
+                                    onChange={(e) => handleCriteriaChange('grammar', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2 pt-4 border-t border-slate-100">
                         <label className="text-sm font-bold text-slate-900">Overall Band Score</label>
                         <div className="relative">
                             <Input 
                                 type="text" 
-                                placeholder="e.g., 7.5"
                                 value={score}
-                                onChange={(e) => setScore(e.target.value)}
-                                className="pl-4 pr-12 h-11 text-lg font-medium"
+                                readOnly
+                                className="pl-4 pr-12 h-11 text-lg font-bold bg-slate-50 text-slate-900"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">/ 9.0</span>
                         </div>
+                        <p className="text-[10px] text-slate-500 italic text-right">
+                           * Calculated automatically from criteria scores (Average rounded to nearest 0.5)
+                        </p>
                     </div>
 
                     <div className="space-y-2">
@@ -292,7 +389,7 @@ export function GradingPage() {
                         <Button 
                             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11 shadow-lg shadow-purple-200 transition-all hover:translate-y-[-1px]"
                             onClick={handleSubmit}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !score}
                         >
                             {isSubmitting ? "Saving..." : "Submit Grade"}
                         </Button>

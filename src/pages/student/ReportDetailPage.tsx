@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router";
-import { useEffect, useState } from "react"; // Added imports
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   FileText,
@@ -12,9 +12,18 @@ import {
   BookOpen,
   TrendingUp,
   AlertTriangle,
-  UserCheck, // Added icon for teacher feedback
-  Loader2 // Added loader
+  UserCheck,
+  Loader2
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Tooltip
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { BadgeStatus } from "@/components/ui/badge-status";
 import { ROUTES } from "@/constants";
@@ -26,12 +35,7 @@ interface AIFeedback {
   summary: string;
   strengths: string[];
   weaknesses: string[];
-  detailedAnalysis?: {
-    taskAchievement: { score: number; feedback: string };
-    coherenceCohesion: { score: number; feedback: string };
-    lexicalResource: { score: number; feedback: string };
-    grammaticalRange: { score: number; feedback: string };
-  };
+  criteria: { name: string; score: number; color: string }[];
   suggestions?: string[];
 }
 
@@ -41,7 +45,7 @@ interface Submission {
   assignmentTitle: string;
   assignmentClassName: string;
   studentId: string;
-  status: "PENDING" | "SUBMITTED" | "GRADED" | "SCORED"; // Updated status
+  status: "PENDING" | "SUBMITTED" | "GRADED" | "SCORED";
   submittedAt?: string;
   mediaType?: string;
   content?: string;
@@ -51,8 +55,44 @@ interface Submission {
     feedback: string;
     gradedBy: string;
     gradedAt: string;
+    criteria: { name: string; score: number; color: string }[];
   };
 }
+
+const SkillRadarChart = ({ criteria, color = "#8884d8" }: { criteria: { name: string; score: number }[], color?: string }) => {
+    const data = criteria.map(c => ({
+        subject: c.name,
+        score: c.score,
+        fullMark: 9
+    }));
+
+    return (
+        <div className="w-full h-[300px] flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
+                    <PolarGrid stroke="#e2e8f0" />
+                    <PolarAngleAxis 
+                        dataKey="subject" 
+                        tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} 
+                    />
+                    <PolarRadiusAxis angle={30} domain={[0, 9]} tick={false} axisLine={false} />
+                    <Radar
+                        name="Score"
+                        dataKey="score"
+                        stroke={color}
+                        fill={color}
+                        fillOpacity={0.3}
+                    />
+                    <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ color: '#1e293b', fontWeight: 'bold' }}
+                    />
+                </RadarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
 
 export function ReportDetailPage() {
   const navigate = useNavigate();
@@ -66,6 +106,25 @@ export function ReportDetailPage() {
           try {
               const data = await attemptApi.getAttemptById(submissionId);
               
+              const mapCriteria = (skillType: string, aiScores: any) => {
+                  if (!aiScores) return [];
+                   if (skillType === 'speaking') {
+                      return [
+                          { name: "Fluency", score: Number(aiScores.fluency || 0), color: "text-purple-600" },
+                          { name: "Pronunciation", score: Number(aiScores.pronunciation || 0), color: "text-blue-600" },
+                          { name: "Lexical", score: Number(aiScores.lexical || 0), color: "text-emerald-600" },
+                          { name: "Grammar", score: Number(aiScores.grammar || 0), color: "text-orange-600" }
+                      ];
+                  } else {
+                      return [
+                          { name: "Task Response", score: Number(aiScores.taskResponse || 0), color: "text-purple-600" },
+                          { name: "Coherence", score: Number(aiScores.coherence || 0), color: "text-blue-600" },
+                          { name: "Lexical", score: Number(aiScores.lexical || 0), color: "text-emerald-600" },
+                          { name: "Grammar", score: Number(aiScores.grammar || 0), color: "text-orange-600" }
+                      ];
+                  }
+              };
+
               // Map API response to Component State
               const mappedSubmission: Submission = {
                   id: data.id,
@@ -75,37 +134,28 @@ export function ReportDetailPage() {
                   studentId: data.learnerId,
                   status: data.status === 'scored' ? 'GRADED' : (data.status === 'submitted' ? 'SUBMITTED' : 'PENDING'),
                   submittedAt: data.submittedAt,
-                  mediaType: data.skillType === 'speaking' ? 'audio' : 'text', // Infer from skillType
+                  mediaType: data.skillType === 'speaking' ? 'audio' : 'text',
                   content: data.content,
                   aiFeedback: data.score ? {
                       score: Number(data.score.overallBand),
                       summary: (data.score.detailedFeedback?.issues || data.score.detailedFeedback?.actions) 
                           ? `${data.score.detailedFeedback.issues || ''}\n\n${data.score.detailedFeedback.actions || ''}`.trim()
-                          : data.score.feedback, // Use detailed if available (AI), else feedback (AI or Teacher if overwritten, but logic below handles separation)
+                          : data.score.feedback,
                       strengths: Array.isArray(data.score.detailedFeedback?.strengths) ? data.score.detailedFeedback.strengths : [],
                       weaknesses: Array.isArray(data.score.detailedFeedback?.weaknesses) ? data.score.detailedFeedback.weaknesses : [],
                       suggestions: typeof data.score.detailedFeedback?.actions === 'string' 
                           ? data.score.detailedFeedback.actions.split('\n').filter((s: string) => s.trim()) 
                           : (Array.isArray(data.score.detailedFeedback?.actions) ? data.score.detailedFeedback.actions : []),
-                      detailedAnalysis: data.score.detailedFeedback?.aiScores ? {
-                           taskAchievement: { score: Number(data.score.detailedFeedback.aiScores.taskResponse || 0), feedback: "" },
-                           coherenceCohesion: { score: Number(data.score.detailedFeedback.aiScores.coherence || 0), feedback: "" },
-                           lexicalResource: { score: Number(data.score.detailedFeedback.aiScores.lexical || 0), feedback: "" },
-                           grammaticalRange: { score: Number(data.score.detailedFeedback.aiScores.grammar || 0), feedback: "" }
-                      } : undefined
+                      criteria: mapCriteria(data.skillType || 'writing', data.score.detailedFeedback?.aiScores)
                   } : undefined,
                   teacherFeedback: data.score?.detailedFeedback?.gradedByTeacher ? {
                       score: Number(data.score.overallBand),
                       feedback: data.score.feedback,
-                      gradedBy: "Teacher", // Could be enriched if we had teacher name in score
-                      gradedAt: data.scoredAt || new Date().toISOString()
+                      gradedBy: "Teacher",
+                      gradedAt: data.scoredAt || new Date().toISOString(),
+                      criteria: mapCriteria(data.skillType || 'writing', data.score)
                   } : undefined
               };
-
-              // Fallback for strengths/weaknesses if not structured (e.g. from simpler AI response)
-              if (mappedSubmission.aiFeedback && mappedSubmission.aiFeedback.strengths.length === 0) {
-                   // Try to parse from free text feedback if needed, or leave empty
-              }
 
               setSubmission(mappedSubmission);
 
@@ -120,7 +170,7 @@ export function ReportDetailPage() {
   }, [submissionId]);
 
   const handleBack = () => {
-    navigate(ROUTES.LEARNER.PROGRESS); // Redirect to Progress or Dashboard
+    navigate(ROUTES.LEARNER.PROGRESS);
   };
 
   if (loading) {
@@ -182,7 +232,7 @@ export function ReportDetailPage() {
 
           <Button
             variant="outline"
-            className="gap-2 border-slate-300"
+            className="gap-2 border-slate-300 hover:border-purple-600 hover:text-purple-600 hover:bg-purple-50 transition-colors"
             onClick={() => window.print()}
           >
             <Download size={16} />
@@ -211,6 +261,24 @@ export function ReportDetailPage() {
                       <div className="text-xs text-slate-500">Overall Score</div>
                   </div>
                </div>
+               
+               {/* Detailed Scores for Teacher Grading */}
+               {teacherFeedback.criteria && teacherFeedback.criteria.length > 0 && (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 p-4 bg-indigo-50/50 rounded-lg border border-indigo-100 items-center">
+                        <div className="order-2 md:order-1 grid grid-cols-2 gap-4">
+                            {teacherFeedback.criteria.map((item, idx) => (
+                                <div key={idx} className="text-center p-2 bg-white rounded shadow-sm border border-indigo-100/50">
+                                    <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{item.name}</span>
+                                    <span className={`block font-bold text-lg ${item.color}`}>{item.score}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="order-1 md:order-2 h-[200px] md:h-[220px]">
+                            <SkillRadarChart criteria={teacherFeedback.criteria} color="#4f46e5" />
+                        </div>
+                   </div>
+               )}
+
                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 text-slate-700 whitespace-pre-wrap">
                    {teacherFeedback.feedback}
                </div>
@@ -237,92 +305,42 @@ export function ReportDetailPage() {
           )}
 
           {/* Detailed Scores */}
-          {aiFeedback?.detailedAnalysis && (
+          {aiFeedback?.criteria && aiFeedback.criteria.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <TrendingUp size={20} className="text-purple-600" />
                 Detailed Band Scores (AI)
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {/* Task Achievement */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      Task Achievement
-                    </span>
-                    <span className="text-lg font-bold text-purple-600">
-                      {aiFeedback.detailedAnalysis.taskAchievement.score}
-                    </span>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                  {/* Chart */}
+                  <div className="h-[250px] bg-slate-50 rounded-xl border border-slate-100">
+                      <SkillRadarChart criteria={aiFeedback.criteria} color="#9333ea" />
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-purple-600 h-2 rounded-full"
-                      style={{
-                        width: `${(aiFeedback.detailedAnalysis.taskAchievement.score / 9) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
 
-                {/* Coherence & Cohesion */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      Coherence & Cohesion
-                    </span>
-                    <span className="text-lg font-bold text-blue-600">
-                      {aiFeedback.detailedAnalysis.coherenceCohesion.score}
-                    </span>
+                  {/* List */}
+                  <div className="grid grid-cols-1 gap-6">
+                    {aiFeedback.criteria.map((item, index) => (
+                        <div key={index} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-700">
+                            {item.name}
+                            </span>
+                            <span className={`text-lg font-bold ${item.color}`}>
+                            {item.score}
+                            </span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2">
+                            <div
+                            className={`h-2 rounded-full ${item.color.replace('text-', 'bg-')}`}
+                            style={{
+                                width: `${(item.score / 9) * 100}%`,
+                            }}
+                            />
+                        </div>
+                        </div>
+                    ))}
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full"
-                      style={{
-                        width: `${(aiFeedback.detailedAnalysis.coherenceCohesion.score / 9) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Lexical Resource */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      Lexical Resource
-                    </span>
-                    <span className="text-lg font-bold text-emerald-600">
-                      {aiFeedback.detailedAnalysis.lexicalResource.score}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-emerald-600 h-2 rounded-full"
-                      style={{
-                        width: `${(aiFeedback.detailedAnalysis.lexicalResource.score / 9) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Grammatical Range */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      Grammatical Range
-                    </span>
-                    <span className="text-lg font-bold text-amber-600">
-                      {aiFeedback.detailedAnalysis.grammaticalRange.score}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-amber-600 h-2 rounded-full"
-                      style={{
-                        width: `${(aiFeedback.detailedAnalysis.grammaticalRange.score / 9) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -339,9 +357,13 @@ export function ReportDetailPage() {
             </h3>
             {submission.content && (
               <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-                  {submission.content}
-                </p>
+                {submission.mediaType === 'audio' && submission.content.startsWith('http') ? (
+                    <audio controls src={submission.content} className="w-full" />
+                ) : (
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
+                        {submission.content}
+                    </p>
+                )}
               </div>
             )}
           </div>
@@ -437,4 +459,3 @@ export function ReportDetailPage() {
 }
 
 export default ReportDetailPage;
-

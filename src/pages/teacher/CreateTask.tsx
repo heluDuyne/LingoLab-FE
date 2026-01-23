@@ -27,15 +27,7 @@ export function CreateTaskPage() {
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
 
-  // AI Config State
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [criteria, setCriteria] = useState<string[]>([
-    "Grammar",
-    "Vocabulary",
-    "Coherence",
-  ]);
-  const [tone, setTone] = useState("Formal & Encouraging");
+
 
   // Scheduling State
   const [dueDate, setDueDate] = useState("");
@@ -142,13 +134,7 @@ export function CreateTaskPage() {
     return "📎";
   };
 
-  const toggleCriteria = (crit: string) => {
-    if (criteria.includes(crit)) {
-      setCriteria(criteria.filter((c) => c !== crit));
-    } else {
-      setCriteria([...criteria, crit]);
-    }
-  };
+
 
   const toggleClassSelection = (classId: string) => {
     setSelectedClassIds(prev => 
@@ -397,102 +383,7 @@ export function CreateTaskPage() {
           </div>
         </div>
 
-        {/* AI Scoring Section */}
-        <div className='space-y-6 pt-8 border-t border-slate-200'>
-          <div className='flex items-center justify-between'>
-            <h2 className='text-xl font-bold text-slate-900'>
-              AI Automated Scoring & Feedback
-            </h2>
-            <label className='relative inline-flex items-center cursor-pointer'>
-              <input
-                type='checkbox'
-                className='sr-only peer'
-                checked={aiEnabled}
-                onChange={(e) => setAiEnabled(e.target.checked)}
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-              <span className='ml-3 text-sm font-medium text-slate-900'>
-                Enable AI
-              </span>
-            </label>
-          </div>
 
-          <div
-            className={`${
-              !aiEnabled ? "opacity-50 pointer-events-none" : ""
-            } space-y-6 transition-opacity`}
-          >
-            <div className='flex flex-col gap-2'>
-              <Label
-                htmlFor='aiPrompt'
-                className='text-slate-900 text-base font-medium'
-              >
-                AI Evaluation Prompt
-              </Label>
-              <textarea
-                id='aiPrompt'
-                className='w-full rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600/50 border border-slate-300 bg-slate-50 focus:border-purple-600 min-h-[144px] placeholder:text-slate-400 p-4 text-base resize-y'
-                placeholder="Describe how the AI should evaluate student submissions. For example: 'As an IELTS examiner, assess this writing task based on coherence, vocabulary, and grammar...'"
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <p className='text-slate-900 text-base font-medium leading-normal pb-2'>
-                Scoring Criteria
-              </p>
-              <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                {[
-                  "Grammar",
-                  "Vocabulary",
-                  "Coherence",
-                  "Fluency",
-                  "Task Achievement",
-                ].map((crit) => (
-                  <label
-                    key={crit}
-                    className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                      criteria.includes(crit)
-                        ? "border-purple-600 bg-purple-50"
-                        : "border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type='checkbox'
-                      className='w-4 h-4 text-purple-600 rounded focus:ring-purple-600'
-                      checked={criteria.includes(crit)}
-                      onChange={() => toggleCriteria(crit)}
-                    />
-                    <span className='text-sm font-medium text-slate-900'>
-                      {crit}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className='flex flex-col gap-2'>
-              <Label
-                htmlFor='tone'
-                className='text-slate-900 text-base font-medium'
-              >
-                AI Feedback Tone
-              </Label>
-              <select
-                id='tone'
-                className='w-full rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600/50 border border-slate-300 bg-slate-50 focus:border-purple-600 h-14 px-4 text-base appearance-none cursor-pointer'
-                value={tone}
-                onChange={(e) => setTone(e.target.value)}
-              >
-                <option>Formal & Encouraging</option>
-                <option>Direct & Concise</option>
-                <option>In-depth & Analytical</option>
-                <option>Custom Template...</option>
-              </select>
-            </div>
-          </div>
-        </div>
 
         {/* Scheduling Section */}
         <div className='space-y-6 pt-8 border-t border-slate-200'>

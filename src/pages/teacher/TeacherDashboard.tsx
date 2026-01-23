@@ -589,52 +589,7 @@ export function TeacherDashboard() {
             </div>
           </section>
 
-          {/* Recent Activity */}
-          <section>
-            <h2 className='text-xl font-bold leading-tight tracking-tight mb-4 text-slate-900'>
-              Recent Activity
-            </h2>
-            <div className='flex flex-col gap-4'>
-              <div className='flex items-start gap-3'>
-                <div className='shrink-0 size-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center'>
-                  <Upload size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    <span className='font-semibold'>Jane Doe</span> submitted
-                    'Essay 1'
-                  </p>
-                  <p className='text-xs text-slate-500 mt-0.5'>
-                    15 minutes ago
-                  </p>
-                </div>
-              </div>
-              <div className='flex items-start gap-3'>
-                <div className='shrink-0 size-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center'>
-                  <UserPlus size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    <span className='font-semibold'>New student</span> enrolled
-                    in 'English 101'
-                  </p>
-                  <p className='text-xs text-slate-500 mt-0.5'>1 hour ago</p>
-                </div>
-              </div>
-              <div className='flex items-start gap-3'>
-                <div className='shrink-0 size-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center'>
-                  <Upload size={16} />
-                </div>
-                <div>
-                  <p className='text-sm text-slate-800'>
-                    <span className='font-semibold'>Carlos Ray</span> submitted
-                    'Speaking Practice'
-                  </p>
-                  <p className='text-xs text-slate-500 mt-0.5'>3 hours ago</p>
-                </div>
-              </div>
-            </div>
-          </section>
+
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { ROUTES } from "@/constants";
 import { toast } from "sonner";
 import { userApi } from "@/services/api/users";
 import { authApi } from "@/services/api/auth";
+import { uploadApi } from "@/services/api/upload";
 import {
   User as UserIcon,
   Camera,
@@ -17,6 +18,8 @@ import {
   MapPin,
   Globe,
   Award,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export function TeacherProfilePage() {
@@ -30,6 +33,16 @@ export function TeacherProfilePage() {
   const [bio, setBio] = useState("");
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState("");
+
+  // Password State
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Password Visibility State
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Professional Info (Not yet in API, keeping local state for UI demo until backend supports it fully if needed, or mapped to bio/other fields later)
   const [specialization, setSpecialization] = useState("IELTS Academic");
@@ -91,6 +104,108 @@ export function TeacherProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate type and size (max 5MB)
+    if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file.');
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size should be less than 5MB.');
+        return;
+    }
+
+    try {
+        const toastId = toast.loading('Uploading avatar...');
+        
+        // 1. Upload to Cloudinary/Server
+        const { url } = await uploadApi.uploadFile(file);
+        
+        // 2. Update User Profile
+        const updatedUser = await userApi.updateUser(user.id, {
+            avatar: url
+        });
+
+        // 3. Update Local State
+        setUser(updatedUser);
+        
+        toast.dismiss(toastId);
+        toast.success('Avatar updated successfully!');
+        
+    } catch (error) {
+        console.error('Failed to upload avatar', error);
+        toast.error('Failed to upload avatar.');
+    } finally {
+        // Reset input
+        e.target.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!user) return;
+    
+    try {
+        const toastId = toast.loading('Removing avatar...');
+        
+        // Update User Profile with empty avatar string
+        const updatedUser = await userApi.updateUser(user.id, {
+            avatar: '' 
+        });
+
+        // Update Local Store
+        setUser(updatedUser);
+        
+        toast.dismiss(toastId);
+        toast.success('Avatar removed successfully');
+        
+    } catch (error) {
+        console.error('Failed to remove avatar', error);
+        toast.error('Failed to remove avatar');
+    }
+  };
+
+  const handlePasswordChange = async () => {
+     if (!currentPassword || !newPassword || !confirmPassword) {
+         toast.error("Please fill in all password fields.");
+         return;
+     }
+
+     if (newPassword !== confirmPassword) {
+         toast.error("New passwords do not match.");
+         return;
+     }
+
+     if (newPassword.length < 6) {
+         toast.error("New password must be at least 6 characters long.");
+         return;
+     }
+
+     try {
+         const toastId = toast.loading("Changing password...");
+         await authApi.changePassword({
+             currentPassword,
+             newPassword,
+             confirmPassword
+         });
+         
+         toast.dismiss(toastId);
+         toast.success("Password changed successfully!");
+         
+         // Clear fields
+         setCurrentPassword("");
+         setNewPassword("");
+         setConfirmPassword("");
+         
+     } catch (error: any) {
+         console.error("Failed to change password", error);
+         toast.error(error.response?.data?.message || "Failed to change password. Please check your current password.");
+     }
+  };
+
   const handleCancel = () => {
     navigate(ROUTES.TEACHER.DASHBOARD);
   };
@@ -131,9 +246,17 @@ export function TeacherProfilePage() {
                 <button
                   className='absolute bottom-0 right-0 bg-purple-600 text-white p-1.5 rounded-full shadow-lg hover:bg-purple-700 transition-colors'
                   title='Change photo'
+                  onClick={() => document.getElementById('avatar-upload')?.click()}
                 >
                   <Camera size={16} />
                 </button>
+                <input 
+                    type="file" 
+                    id="avatar-upload" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                />
               </div>
               <div>
                 <h3 className='text-slate-900 text-xl font-bold'>
@@ -155,7 +278,10 @@ export function TeacherProfilePage() {
               </div>
             </div>
             <div className='flex gap-3 w-full sm:w-auto'>
-              <button className='flex-1 sm:flex-none items-center justify-center rounded-lg px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors'>
+              <button 
+                className='flex-1 sm:flex-none items-center justify-center rounded-lg px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors'
+                onClick={handleRemoveAvatar}
+              >
                 Remove
               </button>
               <button className='flex-1 sm:flex-none items-center justify-center rounded-lg px-4 py-2 border border-slate-200 text-purple-600 text-sm font-semibold hover:bg-slate-50 transition-colors'>
@@ -364,31 +490,72 @@ export function TeacherProfilePage() {
                 <label className='text-sm font-medium text-slate-700'>
                   Current Password
                 </label>
-                <input
-                  className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border'
-                  placeholder='••••••••'
-                  type='password'
-                />
+                <div className="relative">
+                  <input
+                    className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border pr-10'
+                    placeholder='••••••••'
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
               <div className='flex flex-col gap-1.5'>
                 <label className='text-sm font-medium text-slate-700'>
                   New Password
                 </label>
-                <input
-                  className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border'
-                  placeholder='••••••••'
-                  type='password'
-                />
+                <div className="relative">
+                  <input
+                    className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border pr-10'
+                    placeholder='••••••••'
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
               <div className='flex flex-col gap-1.5'>
                 <label className='text-sm font-medium text-slate-700'>
                   Confirm New Password
                 </label>
-                <input
-                  className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border'
-                  placeholder='••••••••'
-                  type='password'
-                />
+                <div className="relative">
+                  <input
+                    className='w-full rounded-lg bg-slate-50 border-slate-200 focus:border-purple-600 focus:bg-white focus:ring-2 focus:ring-purple-600/20 text-slate-900 px-4 py-2.5 text-sm border pr-10'
+                    placeholder='••••••••'
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div className="md:col-span-3 flex justify-end">
+                  <button 
+                    onClick={handlePasswordChange}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors"
+                  >
+                      Update Password
+                  </button>
               </div>
             </div>
           </div>

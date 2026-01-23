@@ -3,8 +3,8 @@ import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, Clock, Star, Sparkles, CheckCircle2, AlertCircle, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
+// import { Textarea } from "@/components/ui/textarea";
+// import { Input } from "@/components/ui/input";
 import { attemptApi } from "@/services/api/attempts";
 import { toast } from "sonner";
 import { BadgeStatus } from "@/components/ui/badge-status";
@@ -57,7 +57,6 @@ export function WritingGradedTaskPage() {
   
   // Extract teacher feedback and score
   const teacherFeedback = attempt.feedbacks?.find((f: any) => f.type === 'TEACHER')?.content || attempt.score?.feedback || "";
-  const overallScore = attempt.score?.overallBand || "";
 
   return (
     <div className="max-w-[1600px] mx-auto pb-12 animate-in fade-in duration-300 px-4 sm:px-6">
@@ -238,27 +237,40 @@ export function WritingGradedTaskPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
-                    
-                    <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-900">Overall Band Score</label>
+                    <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Overall Band Score</span>
                         <div className="relative">
-                            <Input 
-                                type="text" 
-                                value={overallScore}
-                                readOnly
-                                className="pl-4 pr-12 h-11 text-lg font-bold bg-slate-50 text-slate-900 border-slate-200"
-                            />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">/ 9.0</span>
+                            <span className="text-6xl font-black text-slate-900 tracking-tighter">{attempt.score?.overallBand || "0"}</span>
+                            <span className="text-2xl font-bold text-slate-400 absolute -top-2 -right-6">/9</span>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-900">Teacher Feedback</label>
-                        <Textarea 
-                            readOnly
-                            value={teacherFeedback || "No feedback provided."}
-                            className="min-h-[200px] resize-none p-4 text-base leading-relaxed bg-slate-50 text-slate-800 focus-visible:ring-0 border-slate-200"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-semibold text-slate-600">Task Response</span>
+                            <span className="font-bold text-slate-900">{attempt.score?.taskResponse ?? "-"}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-semibold text-slate-600">Coherence</span>
+                            <span className="font-bold text-slate-900">{attempt.score?.coherence ?? "-"}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-semibold text-slate-600">Lexical</span>
+                            <span className="font-bold text-slate-900">{attempt.score?.lexical ?? "-"}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-semibold text-slate-600">Grammar</span>
+                            <span className="font-bold text-slate-900">{attempt.score?.grammar ?? "-"}</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm border-b border-slate-100 pb-2">
+                             Detailed Feedback
+                        </h4>
+                        <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                            {teacherFeedback || "No feedback provided."}
+                        </div>
                     </div>
                 </CardContent>
             </Card>

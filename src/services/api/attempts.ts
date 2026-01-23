@@ -38,7 +38,16 @@ export const attemptApi = {
     return response.data;
   },
 
-  gradeAttempt: async (id: string, data: { score: number; feedback: string }) => {
+  gradeAttempt: async (id: string, data: { 
+      score: number; 
+      feedback: string;
+      fluency?: number;
+      pronunciation?: number;
+      lexical?: number;
+      grammar?: number;
+      coherence?: number;
+      taskResponse?: number;
+  }) => {
     const response = await apiClient.put(`/attempts/${id}/grade`, data);
     return response.data;
   },

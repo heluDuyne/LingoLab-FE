@@ -1,29 +1,123 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Clock, Star, Sparkles, CheckCircle2, AlertCircle, Play, Pause, FileText, List, Bold, Italic, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, Clock, Star, Sparkles, CheckCircle2, AlertCircle, FileText, Play, Pause, Bold, Italic, List, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { attemptApi } from "@/services/api/attempts";
 import { toast } from "sonner";
-// import { BadgeStatus } from "@/components/ui/badge-status"; // Unused for now
+// import { BadgeStatus } from "@/components/ui/badge-status";
 
 export function SpeakingGradingPage() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Grading State
   const [score, setScore] = useState("");
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  const [criteria, setCriteria] = useState<{
+        fluency: string; 
+        pronunciation: string; 
+        lexical: string; 
+        grammar: string;
+  }>({
+      fluency: "", 
+      pronunciation: "", 
+      lexical: "", 
+      grammar: ""
+  });
+
   // Audio Player State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (attemptId) {
+      fetchAttempt(attemptId);
+    }
+  }, [attemptId]);
+
+  // Init from existing score
+  useEffect(() => {
+    if (attempt?.score?.detailedFeedback?.gradedByTeacher) {
+      const s = attempt.score;
+      setCriteria({
+          fluency: (s.fluency ?? s.overallBand ?? "").toString(),
+          pronunciation: (s.pronunciation ?? s.overallBand ?? "").toString(),
+          lexical: (s.lexical ?? s.overallBand ?? "").toString(),
+          grammar: (s.grammar ?? s.overallBand ?? "").toString()
+      });
+      setScore(s.overallBand?.toString() || "");
+      setFeedback(s.feedback || "");
+    }
+  }, [attempt]);
+
+  // Auto-calc
+  useEffect(() => {
+    const values = Object.values(criteria).map(v => parseFloat(v)).filter(v => !isNaN(v));
+    if (values.length === 4) {
+        const sum = values.reduce((a, b) => a + b, 0);
+        const avg = sum / 4;
+        const rounded = Math.round(avg * 2) / 2;
+        setScore(rounded.toString());
+    }
+  }, [criteria]);
+
+  const handleCriteriaChange = (field: keyof typeof criteria, value: string) => {
+    if (value === "" || (parseFloat(value) >= 0 && parseFloat(value) <= 9)) {
+      setCriteria(prev => ({ ...prev, [field]: value }));
+    }
+  };
+
+  const fetchAttempt = async (id: string) => {
+    try {
+      setIsLoading(true);
+      const data = await attemptApi.getAttemptById(id);
+      setAttempt(data);
+    } catch (error) {
+      console.error("Failed to fetch attempt", error);
+      toast.error("Failed to load submission");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!attemptId) return;
+    
+    const numScore = parseFloat(score);
+    if (isNaN(numScore)) { 
+        toast.error("Overall score is invalid. Please check criteria scores.");
+        return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await attemptApi.gradeAttempt(attemptId, {
+          score: numScore,
+          feedback: feedback,
+          fluency: parseFloat(criteria.fluency) || 0,
+          coherence: parseFloat(criteria.fluency) || 0,
+          pronunciation: parseFloat(criteria.pronunciation) || 0,
+          lexical: parseFloat(criteria.lexical) || 0,
+          grammar: parseFloat(criteria.grammar) || 0
+      });
+      toast.success("Grading saved successfully!");
+      navigate(-1);
+    } catch (error) {
+      console.error("Failed to save grading", error);
+      toast.error("Failed to save grading");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -48,58 +142,11 @@ export function SpeakingGradingPage() {
     }
   };
 
-  useEffect(() => {
-    if (attemptId) {
-      fetchAttempt(attemptId);
-    }
-  }, [attemptId]);
-
-  const fetchAttempt = async (id: string) => {
-    try {
-      setIsLoading(true);
-      const data = await attemptApi.getAttemptById(id);
-      setAttempt(data);
-    } catch (error) {
-      console.error("Failed to fetch attempt", error);
-      toast.error("Failed to load submission");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!attemptId) return;
-    
-    const numScore = parseFloat(score);
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) { 
-        toast.error("Please enter a valid numeric score");
-        return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      await attemptApi.gradeAttempt(attemptId, {
-          score: numScore,
-          feedback: feedback
-      });
-      toast.success("Grading saved successfully!");
-      navigate(-1);
-    } catch (error) {
-      console.error("Failed to save grading", error);
-      toast.error("Failed to save grading");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Mock format time
   const formatTime = (time: number) => {
     const min = Math.floor(time / 60);
     const sec = Math.floor(time % 60);
     return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
-
-
 
   if (isLoading) {
     return (
@@ -133,9 +180,11 @@ export function SpeakingGradingPage() {
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
             </Button>
-            <div className="flex items-center text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                <Clock className="w-4 h-4 mr-2" />
-                Submitted: {new Date(attempt.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+            <div className="flex items-center gap-2">
+                <div className="flex items-center text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                    <Clock className="w-4 h-4 mr-2" />
+                    Submitted: {new Date(attempt.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                </div>
             </div>
         </div>
         
@@ -152,6 +201,12 @@ export function SpeakingGradingPage() {
                          <span>{attempt.studentEmail}</span>
                         </>
                     )}
+                    {attempt.className && (
+                        <>
+                         <span className="text-slate-300">•</span>
+                         <span className="text-slate-500">{attempt.className}</span>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
@@ -160,7 +215,6 @@ export function SpeakingGradingPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Column 1: Student Response (Speaking specific) */}
         <div className="xl:col-span-1 space-y-6">
-          
           {/* Task Description Card */}
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5">
@@ -175,7 +229,7 @@ export function SpeakingGradingPage() {
                  </div>
              </CardContent>
           </Card>
-            
+
           {/* Audio Player Card */}
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5 flex flex-row items-center justify-between">
@@ -190,14 +244,12 @@ export function SpeakingGradingPage() {
             <CardContent className="pt-8 pb-8">
                 {(() => {
                     const audioSrc = attempt?.media?.[0]?.storageUrl || (attempt?.content?.startsWith("http") ? attempt?.content : null);
-                    console.log("Audio Source Attempted:", audioSrc, "Media:", attempt?.media, "Content:", attempt?.content);
                     
                     if (!audioSrc) {
                         return (
                             <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2 bg-slate-50 rounded-lg border border-slate-100 border-dashed">
                                 <AlertCircle className="w-8 h-8 text-slate-300" />
                                 <p className="font-semibold">No Audio Recording Found</p>
-                                <p className="text-xs">The student has not submitted an audio file.</p>
                             </div>
                         );
                     }
@@ -217,10 +269,9 @@ export function SpeakingGradingPage() {
                                 hidden
                             />
                             
-                            {/* Visualizer Mockup (Static for now, but responsive to play state) */}
+                            {/* Visualizer Mockup */}
                             <div className="h-24 flex items-end justify-center gap-1 mb-6 px-4">
                                 {[...Array(20)].map((_, i) => {
-                                    // Simple animation simulation based on playing state
                                     const height = isPlaying ? Math.random() * 80 + 20 + "%" : "30%";
                                     const isActive = isPlaying || i < (currentTime / (duration || 1)) * 20; 
                                     return (
@@ -259,21 +310,12 @@ export function SpeakingGradingPage() {
                                             className="absolute top-0 left-0 h-full bg-purple-600 rounded-full transition-all duration-100"
                                             style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                                         ></div>
-                                        {/* Thumb */}
-                                        <div 
-                                            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-purple-600 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                                            style={{ left: `${(currentTime / (duration || 1)) * 100}%` }}
-                                        ></div>
                                     </div>
                                     <div className="flex justify-between mt-2 text-xs font-medium text-slate-400">
                                         <span className="text-purple-600">{formatTime(currentTime)}</span>
                                         <span>{formatTime(duration)}</span>
                                     </div>
                                 </div>
-
-                                <button className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold text-slate-700 hover:bg-slate-50">
-                                    1x
-                                </button>
                             </div>
                         </>
                     );
@@ -288,9 +330,6 @@ export function SpeakingGradingPage() {
                   <FileText className="w-4 h-4 text-purple-600" />
                   Automated Transcription
               </CardTitle>
-              <button className="text-xs font-bold text-purple-600 hover:underline flex items-center gap-1">
-                  Download.txt
-              </button>
             </CardHeader>
              <CardContent className="pt-0">
                  <div className="max-h-[400px] overflow-y-auto p-6 space-y-6 bg-slate-50/50">
@@ -308,13 +347,11 @@ export function SpeakingGradingPage() {
                  </div>
              </CardContent>
           </Card>
-
         </div>
 
-        {/* Column 2 & 3: AI Eval & Grading Form (Same as Writing) */}
-         <div className="xl:col-span-1 space-y-4">
-             {/* AI Eval Card (Same as GradingPage) */}
-              <Card className="border-slate-200 shadow-sm h-full border-t-4 border-t-purple-600">
+        {/* Column 2: AI Evaluation */}
+        <div className="xl:col-span-1 space-y-4">
+            <Card className="border-slate-200 shadow-sm h-full border-t-4 border-t-purple-600">
                 <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5">
                     <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-purple-600 fill-purple-100" />
@@ -329,60 +366,66 @@ export function SpeakingGradingPage() {
                             <div className="text-4xl font-black text-purple-700 leading-none">{attempt.score?.detailedFeedback?.overallBand || attempt.score?.overallBand || "N/A"}</div>
                         </div>
                         <div className="text-right space-y-1">
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Fluency:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.fluency || attempt.score?.fluency || "-"}</span>
-                            </div>
-                            <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Pronunciation:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.pronunciation || attempt.score?.pronunciation || "-"}</span>
-                            </div>
-                             <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Lexical:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.lexical || attempt.score?.lexical || "-"}</span>
-                            </div>
-                             <div className="text-xs text-slate-600 flex justify-between gap-4">
-                                <span>Grammar:</span> <span className="font-bold text-slate-900">{attempt.score?.detailedFeedback?.aiScores?.grammar || attempt.score?.grammar || "-"}</span>
-                            </div>
+                            {attempt.score?.detailedFeedback?.aiScores && Object.entries(attempt.score.detailedFeedback.aiScores).map(([key, value]) => (
+                                <div key={key} className="text-xs text-slate-600 flex justify-between gap-4">
+                                    <span className="capitalize">{key}:</span> <span className="font-bold text-slate-900">{typeof value === 'number' ? value.toFixed(1) : String(value)}</span>
+                                </div>
+                            ))}
+                            {!attempt.score?.detailedFeedback?.aiScores && (
+                                <>
+                                    <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                        <span>Fluency:</span> <span className="font-bold text-slate-900">{attempt.score?.fluency || "-"}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                        <span>Pronunciation:</span> <span className="font-bold text-slate-900">{attempt.score?.pronunciation || "-"}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                        <span>Lexical:</span> <span className="font-bold text-slate-900">{attempt.score?.lexical || "-"}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-600 flex justify-between gap-4">
+                                        <span>Grammar:</span> <span className="font-bold text-slate-900">{attempt.score?.grammar || "-"}</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
-                     
-                     {/* Strengths */}
-                     <div className="space-y-3">
+
+                    {/* Strengths */}
+                    <div className="space-y-3">
                         <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
                             <CheckCircle2 className="w-4 h-4 text-green-600" />
                             Strengths
                         </h4>
-                        <div className="text-sm text-slate-600 bg-green-50/50 p-3 rounded-md border border-green-100">
-                             {attempt.score?.detailedFeedback?.strengths || "No specific strengths analysis available."}
+                        <div className="text-sm text-slate-600 bg-green-50/50 p-3 rounded-md border border-green-100 whitespace-pre-line">
+                            {attempt.score?.detailedFeedback?.strengths || "No specific strengths analysis available."}
                         </div>
                     </div>
-                     
-                     {/* Areas for Improvement */}
-                     <div className="space-y-3">
+
+                    {/* Weaknesses */}
+                    <div className="space-y-3">
                         <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
                             <AlertCircle className="w-4 h-4 text-amber-500" />
                             Areas for Improvement
                         </h4>
-                         <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded-md border border-amber-100">
-                             {attempt.score?.detailedFeedback?.issues || "No specific issues analysis available."}
+                         <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded-md border border-amber-100 whitespace-pre-line">
+                            {attempt.score?.detailedFeedback?.issues || "No specific issues analysis available."}
                         </div>
                     </div>
 
-                    {/* Actions */}
-                     <div className="space-y-3">
-                        <h4 className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                             <Sparkles className="w-4 h-4 text-purple-500" />
-                            Recommended Actions
-                        </h4>
-                         <div className="text-sm text-slate-600 bg-purple-50/50 p-3 rounded-md border border-purple-100 italic">
-                             {attempt.score?.detailedFeedback?.actions || "No specific actions available."}
-                        </div>
+                    {/* AI Suggestion / Actions */}
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Recommended Actions</div>
+                        <p className="text-sm text-slate-600 italic leading-relaxed whitespace-pre-line">
+                            {attempt.score?.detailedFeedback?.actions || "No specific actions available."}
+                        </p>
                     </div>
                 </CardContent>
             </Card>
         </div>
 
+        {/* Column 3: Grading Form */}
         <div className="xl:col-span-1 space-y-4">
-            {/* Grading Form (Same as GradingPage) */}
-             <Card className="border-slate-200 shadow-sm sticky top-6">
+            <Card className="border-slate-200 shadow-sm sticky top-6">
                 <CardHeader className="bg-white border-b border-slate-100 pb-4 pt-5">
                     <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                         <Star className="w-5 h-5 text-purple-600 fill-purple-600" />
@@ -390,18 +433,71 @@ export function SpeakingGradingPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
-                    <div className="space-y-2">
+                    
+                    {/* Criteria Scores */}
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Fluency & Coherence</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0-9"
+                                    value={criteria.fluency}
+                                    onChange={(e) => handleCriteriaChange('fluency', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Lexical Resource</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0-9"
+                                    value={criteria.lexical}
+                                    onChange={(e) => handleCriteriaChange('lexical', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Grammatical Range</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0-9"
+                                    value={criteria.grammar}
+                                    onChange={(e) => handleCriteriaChange('grammar', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-700 uppercase">Pronunciation</label>
+                                <Input 
+                                    type="number"
+                                    min="0" max="9" step="0.5"
+                                    placeholder="0-9"
+                                    value={criteria.pronunciation}
+                                    onChange={(e) => handleCriteriaChange('pronunciation', e.target.value)}
+                                    className="font-medium"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2 pt-4 border-t border-slate-100">
                         <label className="text-sm font-bold text-slate-900">Overall Band Score</label>
                         <div className="relative">
                             <Input 
                                 type="text" 
-                                placeholder="e.g., 6.5"
                                 value={score}
-                                onChange={(e) => setScore(e.target.value)}
-                                className="pl-4 pr-12 h-11 text-lg font-medium"
+                                readOnly
+                                className="pl-4 pr-12 h-11 text-lg font-bold bg-slate-50 text-slate-900"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">/ 9.0</span>
                         </div>
+                        <p className="text-[10px] text-slate-500 italic text-right">
+                           * Calculated automatically.
+                        </p>
                     </div>
 
                     <div className="space-y-2">
@@ -426,7 +522,7 @@ export function SpeakingGradingPage() {
                         <Button 
                             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11 shadow-lg shadow-purple-200 transition-all hover:translate-y-[-1px]"
                             onClick={handleSubmit}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !score}
                         >
                             {isSubmitting ? "Saving..." : "Submit Grade"}
                         </Button>
@@ -441,7 +537,6 @@ export function SpeakingGradingPage() {
                 </CardContent>
             </Card>
         </div>
-
       </div>
     </div>
   );

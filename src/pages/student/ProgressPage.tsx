@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   Eye,
   Loader2,
+  Mic,
+  PenTool
 } from "lucide-react";
 import {
   LineChart,
@@ -43,23 +45,22 @@ export function ProgressPage() {
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentAttempts, setRecentAttempts] = useState<AttemptList[]>([]);
-  const [skillData, setSkillData] = useState<any[]>([]);
+  
+  // Separate stats for charts
+  const [speakingData, setSpeakingData] = useState<any[]>([]);
+  const [writingData, setWritingData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) {
-          // If user is not loaded yet, we can't fetch. 
-          // But if auth is done and no user, we shouldn't be here (protected route).
-          // If auth is loading, we wait.
-          return; 
-      }
+      if (!user?.id) return;
+      
       try {
         const response = await attemptApi.getAttemptsByLearner(user.id);
         const attempts = response.data || [];
 
         // Process data for charts and stats
         const scoredAttempts: AttemptList[] = attempts.filter((a: AttemptList) => 
-            (a.status === 'scored' || a.status === 'submitted') && a.score
+            (a.status === 'scored' || a.status === 'submitted' || a.status === 'grad') && a.score
         ).sort((a: AttemptList, b: AttemptList) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         // Calculate Stats
@@ -82,7 +83,7 @@ export function ProgressPage() {
         });
 
 
-        // Chart Data
+        // Trend Chart Data
         const chart = scoredAttempts.map((a: AttemptList) => ({
             date: new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
             score: Number(a.score?.overallBand) || 0,
@@ -90,41 +91,65 @@ export function ProgressPage() {
         }));
         setChartData(chart);
 
-        // Skill Radar Data (Mocked logic based on aggregated scores if available, else random for demo if detail missing)
-        // Ideally we'd aggregate specific skill scores from attempts
-        const skillAgg = {
-            fluency: 0, pronunciation: 0, lexical: 0, grammar: 0, coherence: 0, count: 0
-        };
-        
-        scoredAttempts.forEach((a: AttemptList) => {
-             // Mock extraction if detailed scores aren't in the list view (they might be in detail view only)
-             // Assuming list view has basic core. checking logic..
-             // If data isn't deep enough, we use overall or mock distribution centered around overall
-             if (!a.score) return;
-             const base = Number(a.score.overallBand) || 6.0;
-             skillAgg.fluency += (a.score.fluency || base);
-             skillAgg.pronunciation += (a.score.pronunciation || base);
-             skillAgg.lexical += (a.score.lexical || base);
-             skillAgg.grammar += (a.score.grammar || base);
-             skillAgg.count++;
-        });
+        // --- Aggregation Logic ---
 
-        if (skillAgg.count > 0) {
-            setSkillData([
-                { subject: 'Fluency', A: (skillAgg.fluency / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Pronunciation', A: (skillAgg.pronunciation / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Lexical', A: (skillAgg.lexical / skillAgg.count).toFixed(1), fullMark: 9 },
-                { subject: 'Grammar', A: (skillAgg.grammar / skillAgg.count).toFixed(1), fullMark: 9 },
-            ]);
-        } else {
-             // Default if no data
-             setSkillData([
-                { subject: 'Fluency', A: 0, fullMark: 9 },
-                { subject: 'Pronunciation', A: 0, fullMark: 9 },
-                { subject: 'Lexical', A: 0, fullMark: 9 },
-                { subject: 'Grammar', A: 0, fullMark: 9 },
-            ]);
-        }
+        // Helper to aggregate data
+        const aggregateSkills = (skillAttempts: AttemptList[], type: 'speaking' | 'writing') => {
+             const agg = {
+                 cat1: 0, cat2: 0, cat3: 0, cat4: 0, count: 0
+             };
+
+             skillAttempts.forEach(a => {
+                 if (!a.score) return;
+                 // Try deep path first (from detailedFeedback.aiScores), then root score props, then default
+                 const aiScores = a.score.detailedFeedback?.aiScores || {};
+                 const rootScores = a.score;
+
+                 let c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+                 const base = Number(rootScores.overallBand) || 0; 
+                 // If detailed scores are missing, we might use overallBand as a placeholder or 0. 
+                 // Using overallBand prevents charts from looking broken if detail is missing.
+
+                 if (type === 'speaking') {
+                     // Fluency, Pronunciation, Lexical, Grammar
+                     c1 = Number(aiScores.fluency || rootScores.fluency || base);
+                     c2 = Number(aiScores.pronunciation || rootScores.pronunciation || base);
+                     c3 = Number(aiScores.lexical || rootScores.lexical || base);
+                     c4 = Number(aiScores.grammar || rootScores.grammar || base);
+                 } else {
+                     // Task Response, Coherence, Lexical, Grammar
+                     c1 = Number(aiScores.taskResponse || rootScores.fluency || base); // Assuming fallback might map closely or just use base
+                     c2 = Number(aiScores.coherence || rootScores.pronunciation || base);
+                     c3 = Number(aiScores.lexical || rootScores.lexical || base);
+                     c4 = Number(aiScores.grammar || rootScores.grammar || base);
+                 }
+
+                 agg.cat1 += c1;
+                 agg.cat2 += c2;
+                 agg.cat3 += c3;
+                 agg.cat4 += c4;
+                 agg.count++;
+             });
+
+             if (agg.count === 0) return [];
+
+             const labels = type === 'speaking' 
+                ? ['Fluency', 'Pronunciation', 'Lexical', 'Grammar']
+                : ['Task Response', 'Coherence', 'Lexical', 'Grammar'];
+            
+             return [
+                 { subject: labels[0], A: (agg.cat1 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[1], A: (agg.cat2 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[2], A: (agg.cat3 / agg.count).toFixed(1), fullMark: 9 },
+                 { subject: labels[3], A: (agg.cat4 / agg.count).toFixed(1), fullMark: 9 },
+             ];
+        };
+
+        const speakingAttempts = scoredAttempts.filter(a => a.skillType?.toLowerCase() === 'speaking');
+        const writingAttempts = scoredAttempts.filter(a => a.skillType?.toLowerCase() === 'writing');
+
+        setSpeakingData(aggregateSkills(speakingAttempts, 'speaking'));
+        setWritingData(aggregateSkills(writingAttempts, 'writing'));
 
         setRecentAttempts(scoredAttempts.reverse().slice(0, 5));
 
@@ -214,10 +239,9 @@ export function ProgressPage() {
         </div>
       </div>
 
-      {/* Main Chart & Skill Radar */}
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
-        {/* Trend Chart */}
-        <div className='lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[400px]'>
+      {/* Main Trend Chart */}
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+        <div className='col-span-1 md:col-span-3 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[400px]'>
           <div className='flex justify-between items-center mb-6'>
             <h3 className='text-lg font-bold text-slate-900'>
               Score History Trend
@@ -238,122 +262,158 @@ export function ProgressPage() {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
-        {/* Skill Radar */}
+      {/* Skill Radar Charts Row */}
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+        {/* Speaking Chart */}
         <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[400px]'>
           <div className='flex justify-between items-center mb-6'>
             <h3 className='text-lg font-bold text-slate-900 flex items-center gap-2'>
-              <Brain className='text-purple-600' size={24} />
-              Skill Breakdown
+              <Mic className='text-purple-600' size={24} />
+              Speaking Skills
             </h3>
           </div>
           <div className="flex-1 w-full h-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={300}>
-                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={skillData}>
-                    <PolarGrid stroke="#E2E8F0" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748B', fontSize: 12 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 9]} tickCount={6} />
-                    <Radar name="Performance" dataKey="A" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-                </RadarChart>
-            </ResponsiveContainer>
+             {speakingData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={speakingData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis 
+                            dataKey="subject" 
+                            tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} 
+                        />
+                        <PolarRadiusAxis angle={30} domain={[0, 9]} tick={false} axisLine={false} />
+                        <Radar
+                            name="Avg Score"
+                            dataKey="A"
+                            stroke="#9333ea"
+                            fill="#9333ea"
+                            fillOpacity={0.3}
+                        />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            itemStyle={{ color: '#1e293b', fontWeight: 'bold' }}
+                        />
+                    </RadarChart>
+                </ResponsiveContainer>
+             ) : (
+                <div className="text-center text-slate-400">
+                    <p>No speaking tasks evaluated yet.</p>
+                </div>
+             )}
+          </div>
+        </div>
+
+        {/* Writing Chart */}
+        <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[400px]'>
+          <div className='flex justify-between items-center mb-6'>
+            <h3 className='text-lg font-bold text-slate-900 flex items-center gap-2'>
+              <PenTool className='text-blue-600' size={24} />
+              Writing Skills
+            </h3>
+          </div>
+          <div className="flex-1 w-full h-full flex items-center justify-center">
+             {writingData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={writingData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis 
+                            dataKey="subject" 
+                            tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} 
+                        />
+                        <PolarRadiusAxis angle={30} domain={[0, 9]} tick={false} axisLine={false} />
+                        <Radar
+                            name="Avg Score"
+                            dataKey="A"
+                            stroke="#2563eb"
+                            fill="#2563eb"
+                            fillOpacity={0.3}
+                        />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            itemStyle={{ color: '#1e293b', fontWeight: 'bold' }}
+                        />
+                    </RadarChart>
+                </ResponsiveContainer>
+             ) : (
+                <div className="text-center text-slate-400">
+                    <p>No writing tasks evaluated yet.</p>
+                </div>
+             )}
           </div>
         </div>
       </div>
 
-      {/* Strengths & Weaknesses + Recent Activity */}
-      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-        {/* Strengths & Weaknesses - Placeholder for now until AI feedback analysis logic is better */}
-        <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full'>
-          <h3 className='text-lg font-bold text-slate-900 mb-6'>
-            Performance Summary
-          </h3>
-          <div className='flex flex-col gap-6'>
-            <div className='flex-1'>
-               <h4 className='text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2'>
-                <span className='w-2 h-2 rounded-full bg-green-500' />
-                Top Strengths
-              </h4>
-               {stats.averageScore >= 6.5 ? (
-                   <ul className='space-y-3'>
-                        <li className='flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-100'>
-                        <CheckCircle size={18} className='text-green-600 mt-0.5' />
-                        <span className='text-sm text-slate-800'>Consistent performance in recent tasks.</span>
-                        </li>
-                   </ul>
-               ) : (
-                   <p className="text-sm text-slate-500">Keep practicing to identify your core strengths!</p>
-               )}
-            </div>
-             <div className='flex-1'>
-               <h4 className='text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2'>
-                <span className='w-2 h-2 rounded-full bg-orange-500' />
-                Focus Areas
-              </h4>
-                <ul className='space-y-3'>
-                    <li className='flex items-start gap-3 p-3 bg-orange-50 rounded-lg border border-orange-100'>
-                    <AlertTriangle size={18} className='text-orange-600 mt-0.5' />
-                    <span className='text-sm text-slate-800'>Continue working on improving your overall band score.</span>
-                    </li>
-                </ul>
-            </div>
-          </div>
+      {/* Recent Activity Table */}
+      <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200'>
+        <div className='flex justify-between items-center mb-6'>
+            <h3 className='text-lg font-bold text-slate-900'>Recent Activity</h3>
         </div>
-
-        {/* Recent Activity Table */}
-        <div className='bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full overflow-hidden'>
-          <div className='flex justify-between items-center mb-6'>
-            <h3 className='text-lg font-bold text-slate-900'>
-              Recent Submissions
-            </h3>
-          </div>
-
-          <div className='overflow-x-auto'>
-            <table className='w-full text-left border-collapse'>
-              <thead>
-                <tr className='border-b border-slate-100'>
-                  <th className='py-3 px-2 text-xs font-medium text-slate-500 uppercase'>Task</th>
-                  <th className='py-3 px-2 text-xs font-medium text-slate-500 uppercase'>Date</th>
-                  <th className='py-3 px-2 text-xs font-medium text-slate-500 uppercase text-center'>Score</th>
-                  <th className='py-3 px-2 text-xs font-medium text-slate-500 uppercase text-right'>Action</th>
-                </tr>
-              </thead>
-              <tbody className='text-sm'>
-                {recentAttempts.length > 0 ? (
-                    recentAttempts.map((attempt) => (
-                        <tr key={attempt.id} className='group hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0'>
-                        <td className='py-3 px-2 font-medium text-slate-900'>
-                            {attempt.title || "Untitled Task"}
-                            <div className='text-xs font-normal text-slate-500 capitalize'>
-                            {attempt.skillType}
-                            </div>
-                        </td>
-                        <td className='py-3 px-2 text-slate-500 whitespace-nowrap'>
-                            {new Date(attempt.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className='py-3 px-2 text-center'>
-                            <span className={`inline-flex items-center justify-center w-8 h-8 font-bold rounded-full text-xs ${Number(attempt.score?.overallBand || 0) >= 6.5 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {attempt.score?.overallBand || '-'}
-                            </span>
-                        </td>
-                        <td className='py-3 px-2 text-right'>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-purple-600 hover:bg-purple-50 hover:text-purple-700" onClick={() => navigate(`/learner/report/${attempt.id}`)}>
-                                <Eye size={18} />
-                            </Button>
-                        </td>
-                        </tr>
-                    ))
-                ) : (
-                    <tr>
-                        <td colSpan={4} className="py-8 text-center text-slate-500">No submissions yet.</td>
+        <div className="overflow-x-auto">
+            <table className="w-full text-left order-collapse">
+                <thead>
+                    <tr className="border-b border-slate-100">
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Assignment</th>
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Date</th>
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Type</th>
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Score</th>
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Status</th>
+                        <th className="p-4 font-semibold text-slate-500 text-sm">Action</th>
                     </tr>
-                )}
-              </tbody>
+                </thead>
+                <tbody>
+                    {recentAttempts.map((attempt) => (
+                        <tr key={attempt.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="p-4 text-slate-900 font-medium">{attempt.title || 'Untitled Task'}</td>
+                            <td className="p-4 text-slate-500 text-sm">
+                                {new Date(attempt.createdAt).toLocaleDateString()}
+                            </td>
+                                <td className="p-4">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                    attempt.skillType?.toLowerCase() === 'speaking' 
+                                    ? 'bg-purple-100 text-purple-700' 
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                    {attempt.skillType?.toLowerCase() === 'speaking' ? <Mic size={12}/> : <PenTool size={12}/>}
+                                    {attempt.skillType || 'Unknown'}
+                                </span>
+                            </td>
+                            <td className="p-4">
+                                <span className="font-bold text-slate-900">{attempt.score?.overallBand || '-'}</span>
+                                <span className="text-slate-400 text-xs">/9</span>
+                            </td>
+                            <td className="p-4">
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                    attempt.status === 'scored' || attempt.status === 'grad'
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                    {attempt.status.toUpperCase()}
+                                </span>
+                            </td>
+                                <td className="p-4">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-8 text-xs border-purple-200 text-purple-600 hover:bg-purple-50 hover:border-purple-600"
+                                    onClick={() => navigate(`/learner/report/${attempt.id}`)}
+                                >
+                                    <Eye size={14} className="mr-1.5" />
+                                    View Report
+                                </Button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
             </table>
-          </div>
+            {recentAttempts.length === 0 && (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                    No recent activity found.
+                </div>
+            )}
         </div>
       </div>
     </div>
   );
 }
-
-export default ProgressPage;

@@ -67,6 +67,8 @@ export function SpeakingSubmissionPage() {
 
         
         const data = await assignmentApi.getAssignmentById(assignmentId) as any;
+        console.log("Assignment Data:", data); // Debug log
+        console.log("Prompt Data:", data.prompt); // Debug log
         
         // Transform API data to UI model
         setAssignment({
@@ -76,7 +78,7 @@ export function SpeakingSubmissionPage() {
             type: "SPEAKING",
             dueDate: data.deadline.toString(),
             description: data.description || "No description provided.",
-            prompt: data.prompt?.content || "No prompt content",
+            prompt: data.prompt?.content || data.description || "No prompt content",
             speakingTime: 120, // Default or fetch from assignment/prompt
             tips: [
                 "Speak clearly and at a natural pace",

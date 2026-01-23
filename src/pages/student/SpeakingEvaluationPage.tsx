@@ -100,7 +100,15 @@ export function SpeakingEvaluationPage() {
                                 score: attemptDetails.score.overallBand,
                                 summary: attemptDetails.score.feedback,
                                 details: attemptDetails.score.detailedFeedback?.note || "",
-                                aiScores: {
+                                gradedByTeacher: attemptDetails.score.detailedFeedback?.gradedByTeacher,
+                                finalScores: {
+                                    fluency: attemptDetails.score.fluency,
+                                    pronunciation: attemptDetails.score.pronunciation,
+                                    lexical: attemptDetails.score.lexical,
+                                    grammar: attemptDetails.score.grammar,
+                                    coherence: attemptDetails.score.coherence
+                                },
+                                aiScores: attemptDetails.score.detailedFeedback?.aiScores || {
                                     fluency: attemptDetails.score.fluency,
                                     pronunciation: attemptDetails.score.pronunciation,
                                     lexical: attemptDetails.score.lexical,
@@ -209,13 +217,34 @@ export function SpeakingEvaluationPage() {
                                 <div className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between">
                                     <h3 className="font-bold text-purple-900 flex items-center gap-2">
                                         <Star className="w-5 h-5 fill-purple-600 text-purple-600" />
-                                        {(submissionStatus === 'SCORED' || submissionStatus === 'scored') ? "Teacher Feedback" : "Submission Status"}
+                                        {feedback?.gradedByTeacher ? "Teacher Feedback" : "Assessment Result"}
                                     </h3>
                                     <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-purple-100">
                                         <span className="text-xs uppercase font-bold text-purple-400 mr-2">Band Score</span>
                                         <span className="text-xl font-black text-purple-600">{feedback?.score || "N/A"}</span>
                                     </div>
                                 </div>
+
+                                {/* Criteria Breakdown */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-6 pt-6 pb-2 border-b border-slate-100">
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Fluency & Coherence</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.finalScores?.fluency ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Pronunciation</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.finalScores?.pronunciation ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Lexical</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.finalScores?.lexical ?? "-"}</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Grammar</span>
+                                        <span className="block font-bold text-slate-900 text-lg">{feedback?.finalScores?.grammar ?? "-"}</span>
+                                    </div>
+                                </div>
+
                                 <div className="p-6">
                                     <h4 className="text-sm font-bold text-slate-900 mb-2">Comments</h4>
                                     <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
@@ -245,15 +274,22 @@ export function SpeakingEvaluationPage() {
                                             <div className="text-4xl font-black text-purple-700 leading-none">{feedback?.aiEstimatedBand || "N/A"}</div>
                                         </div>
                                         <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                            {feedback?.aiScores && Object.entries(feedback.aiScores).map(([key, value]) => {
-                                                if (value === undefined || value === null) return null;
-                                                return (
-                                                    <div key={key} className="text-center">
-                                                        <span className="block text-xs text-slate-500 uppercase font-bold">{key}</span>
-                                                        <span className="block font-bold text-slate-900">{Number(value).toFixed(1)}</span>
-                                                    </div>
-                                                )
-                                            })}
+                                            <div className="text-center">
+                                                <span className="block text-xs text-slate-500 uppercase font-bold">Fluency & Coherence</span>
+                                                <span className="block font-bold text-slate-900">{Number(feedback?.aiScores?.fluency).toFixed(1) ?? "-"}</span>
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="block text-xs text-slate-500 uppercase font-bold">Lexical Resource</span>
+                                                <span className="block font-bold text-slate-900">{Number(feedback?.aiScores?.lexical).toFixed(1) ?? "-"}</span>
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="block text-xs text-slate-500 uppercase font-bold">Grammatical Range</span>
+                                                <span className="block font-bold text-slate-900">{Number(feedback?.aiScores?.grammar).toFixed(1) ?? "-"}</span>
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="block text-xs text-slate-500 uppercase font-bold">Pronunciation</span>
+                                                <span className="block font-bold text-slate-900">{Number(feedback?.aiScores?.pronunciation).toFixed(1) ?? "-"}</span>
+                                            </div>
                                         </div>
                                     </div>
 
