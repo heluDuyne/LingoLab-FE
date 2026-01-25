@@ -21,7 +21,7 @@ import { userApi } from "@/services/api/users";
 import { assignmentApi } from "@/services/api/assignments";
 import { attemptApi } from "@/services/api/attempts"; // 1. Import attemptApi
 import type { ClassList, User } from "@/types";
-// Removed mockPendingReviews and mockAssignments as they will be fetched from API or are for local use only.
+
 
 export function TeacherDashboard() {
   const navigate = useNavigate();

@@ -103,7 +103,6 @@ export const authApi = {
     }
 
     // Real API call
-    // Real API call
     const { data } = await apiClient.post<any>(
       "/auth/register",
       credentials

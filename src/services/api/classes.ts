@@ -63,5 +63,4 @@ export const classApi = {
     return data;
   },
   
-  // Additional methods can be added as needed (update, delete, enroll etc.)
 };

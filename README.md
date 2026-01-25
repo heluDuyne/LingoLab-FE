@@ -22,7 +22,7 @@ This repository contains the frontend application built with React, TypeScript, 
 
 - **Framework**: [React](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **Language**: [TypeScript](https://www.typescriptlang.org/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Shadcn UI](https://ui.shadcn.com/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) 
 - **State Management**: [Zustand](https://zustand-demo.pmnd.rs/)
 - **Routing**: [React Router](https://reactrouter.com/)
 - **Form Handling**: [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
