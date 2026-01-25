@@ -7,6 +7,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  status?: 'active' | 'locked';
   avatar?: string;
   createdAt: string;
   firstName?: string;

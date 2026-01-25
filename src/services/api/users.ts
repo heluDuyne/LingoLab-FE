@@ -22,5 +22,19 @@ export const userApi = {
   updateUser: async (id: string, userData: UpdateUserData): Promise<User> => {
     const { data } = await apiClient.put<User>(`/users/${id}`, userData);
     return data;
+  },
+
+  lockUser: async (id: string): Promise<User> => {
+    const { data } = await apiClient.put<User>(`/users/${id}/lock`);
+    return data;
+  },
+
+  unlockUser: async (id: string): Promise<User> => {
+    const { data } = await apiClient.put<User>(`/users/${id}/unlock`);
+    return data;
+  },
+
+  deleteUser: async (id: string): Promise<void> => {
+    await apiClient.delete(`/users/${id}`);
   }
 };

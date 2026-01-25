@@ -5,7 +5,8 @@ import {
   PlusCircle,
   UserPlus,
   Eye,
-  Edit3,
+  Ban,
+  ShieldCheck,
   Trash2,
   Clock,
   Upload,
@@ -14,6 +15,14 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores";
 import { ROUTES } from "@/constants";
 import { classApi } from "@/services/api/classes";
@@ -31,6 +40,12 @@ export function TeacherDashboard() {
   const [students, setStudents] = useState<User[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [pendingReviews, setPendingReviews] = useState<any[]>([]); // 3. Change pendingReviews state type
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => void;
+  }>({ open: false, title: "", description: "", action: () => {} });
 
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
 
@@ -44,106 +59,107 @@ export function TeacherDashboard() {
     writingAvg: 0
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (user?.id) {
-        try {
-          setIsLoadingClasses(true);
-          const classRes = await classApi.getClassesByTeacher(user.id);
-          setClasses(classRes.data || []);
-        } catch (error) {
-          console.error("Failed to fetch classes:", error);
-        } finally {
-          setIsLoadingClasses(false);
-        }
-
-        // Fetch assignments for deadlines and stats
-        try {
-          const assignmentRes = await assignmentApi.getTeacherAssignments(50, 0); // Fetch top 50
-          const allAssignments = assignmentRes.data || [];
-
-          // Stats Calculation
-          let completed = 0;
-          let pending = 0;
-          let overdue = 0;
-          let totalExpected = 0;
-          const now = new Date();
-
-          allAssignments.forEach((a) => {
-              const enrolled = a.totalEnrolled || 0;
-              const submitted = a.totalSubmitted || 0;
-              const remaining = Math.max(0, enrolled - submitted);
-              // Check if assignment is past due
-              const isPastDue = new Date(a.deadline) < now;
-
-              totalExpected += enrolled;
-              completed += submitted;
-
-              if (remaining > 0) {
-                  if (isPastDue) {
-                      overdue += remaining;
-                  } else {
-                      pending += remaining;
-                  }
-              }
-          });
-
-          // Calculate Average Grades by Skill
-          const speakingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'SPEAKING' && a.totalScored > 0);
-          const writingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'WRITING' && a.totalScored > 0);
-
-          const calculateWeightedAvg = (tasks: any[]) => {
-               if (tasks.length === 0) return 0;
-               const totalScoreSum = tasks.reduce((sum, t) => sum + (Number(t.averageScore) * t.totalScored), 0);
-               const totalWeight = tasks.reduce((sum, t) => sum + t.totalScored, 0);
-               return totalWeight > 0 ? (totalScoreSum / totalWeight).toFixed(1) : 0;
-          };
-
-          const speakingAvg = calculateWeightedAvg(speakingTasks);
-          const writingAvg = calculateWeightedAvg(writingTasks);
-
-          const rate = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
-          setAssignmentStats({
-              completed,
-              pending,
-              overdue,
-              completionRate: rate,
-              totalExpected,
-              speakingAvg: Number(speakingAvg),
-              writingAvg: Number(writingAvg)
-          });
-          
-          // Filter for upcoming deadlines (future dates)
-          const futureAssignments = allAssignments.filter(a => new Date(a.deadline) > now);
-          // Sort by deadline asc
-          futureAssignments.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
-          setUpcomingDeadlines(futureAssignments.slice(0, 5));
-
-        } catch (error) {
-            console.error("Failed to fetch assignments:", error);
-        }
-
-        try {
-            setIsLoadingStudents(true);
-            const studentRes = await userApi.getLearners();
-            setStudents((studentRes.data || []).slice(0, 5)); 
-        } catch (error) {
-            console.error("Failed to fetch students:", error);
-        } finally {
-            setIsLoadingStudents(false);
-        }
-
-        try {
-          const pendingRes = await attemptApi.getPendingTeacherAttempts(50, 0);
-          setPendingReviews(pendingRes.data || []);
-        } catch (error) {
-          console.error("Failed to fetch pending reviews:", error);
-        }
+  const fetchData = async () => {
+    if (user?.id) {
+      try {
+        setIsLoadingClasses(true);
+        const classRes = await classApi.getClassesByTeacher(user.id);
+        setClasses(classRes.data || []);
+      } catch (error) {
+        console.error("Failed to fetch classes:", error);
+      } finally {
+        setIsLoadingClasses(false);
       }
-    };
 
+      // Fetch assignments for deadlines and stats
+      try {
+        const assignmentRes = await assignmentApi.getTeacherAssignments(50, 0); // Fetch top 50
+        const allAssignments = assignmentRes.data || [];
+
+        // Stats Calculation
+        let completed = 0;
+        let pending = 0;
+        let overdue = 0;
+        let totalExpected = 0;
+        const now = new Date();
+
+        allAssignments.forEach((a) => {
+            const enrolled = a.totalEnrolled || 0;
+            const submitted = a.totalSubmitted || 0;
+            const remaining = Math.max(0, enrolled - submitted);
+            // Check if assignment is past due
+            const isPastDue = new Date(a.deadline) < now;
+
+            totalExpected += enrolled;
+            completed += submitted;
+
+            if (remaining > 0) {
+                if (isPastDue) {
+                    overdue += remaining;
+                } else {
+                    pending += remaining;
+                }
+            }
+        });
+
+        // Calculate Average Grades by Skill
+        const speakingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'SPEAKING' && a.totalScored > 0);
+        const writingTasks = allAssignments.filter(a => (a.type || "").toUpperCase() === 'WRITING' && a.totalScored > 0);
+
+        const calculateWeightedAvg = (tasks: any[]) => {
+             if (tasks.length === 0) return 0;
+             const totalScoreSum = tasks.reduce((sum, t) => sum + (Number(t.averageScore) * t.totalScored), 0);
+             const totalWeight = tasks.reduce((sum, t) => sum + t.totalScored, 0);
+             return totalWeight > 0 ? (totalScoreSum / totalWeight).toFixed(1) : 0;
+        };
+
+        const speakingAvg = calculateWeightedAvg(speakingTasks);
+        const writingAvg = calculateWeightedAvg(writingTasks);
+
+        const rate = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
+        setAssignmentStats({
+            completed,
+            pending,
+            overdue,
+            completionRate: rate,
+            totalExpected,
+            speakingAvg: Number(speakingAvg),
+            writingAvg: Number(writingAvg)
+        });
+        
+        // Filter for upcoming deadlines (future dates)
+        const futureAssignments = allAssignments.filter(a => new Date(a.deadline) > now);
+        // Sort by deadline asc
+        futureAssignments.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+        setUpcomingDeadlines(futureAssignments.slice(0, 5));
+
+      } catch (error) {
+          console.error("Failed to fetch assignments:", error);
+      }
+
+      try {
+          setIsLoadingStudents(true);
+          const studentRes = await userApi.getLearners();
+          setStudents((studentRes.data || []).slice(0, 5)); 
+      } catch (error) {
+          console.error("Failed to fetch students:", error);
+      } finally {
+          setIsLoadingStudents(false);
+      }
+      
+      try {
+        // Fetch pending reviews
+        const attemptsRes = await attemptApi.getPendingTeacherAttempts(50, 0);
+        setPendingReviews(attemptsRes.data || [])
+      } catch (error) {
+        console.error("Failed to fetch pending reviews:", error);
+      }
+    }
+  };
+
+  useEffect(() => {
     fetchData();
-  }, [user?.id]);
+  }, [user]);
 
   const handleStartCreate = () => {
     navigate(ROUTES.TEACHER.CREATE_TASK);
@@ -167,8 +183,74 @@ export function TeacherDashboard() {
         navigate(ROUTES.TEACHER.GRADING.replace(":attemptId", attemptId));
     }
   };
-  
 
+  const handleLockStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Ban Student Account",
+      description: `Are you sure you want to ban ${studentName}? They will be signed out immediately and unable to access the system until unbanned.`,
+      action: async () => {
+        try {
+          await userApi.lockUser(studentId);
+          alert(`${studentName} has been banned successfully.`);
+          fetchData();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to ban student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to ban students.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
+  };
+
+  const handleUnlockStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Unban Student Account",
+      description: `Are you sure you want to unban ${studentName}? They will be able to access the system again.`,
+      action: async () => {
+        try {
+          await userApi.unlockUser(studentId);
+          alert(`${studentName} has been unbanned successfully.`);
+          fetchData();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to unban student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to unban students.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
+  };
+
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Delete Student Account",
+      description: `Are you sure you want to permanently delete ${studentName}? This action cannot be undone and will remove all their data, including attempts and scores.`,
+      action: async () => {
+        try {
+          await userApi.deleteUser(studentId);
+          alert(`${studentName} has been deleted successfully.`);
+          fetchData();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to delete student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to delete students.");
+          } else if (error.response?.data?.error === "Foreign key constraint failed") {
+             alert("Cannot delete student because they have related data (feedbacks, etc) that cannot be automatically removed. Please contact admin.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
+  };
   
   const getStudentName = (student: User) => {
       if (student.firstName && student.lastName) return `${student.firstName} ${student.lastName}`;
@@ -339,18 +421,40 @@ export function TeacherDashboard() {
                                 handleSelectStudent(student.id);
                               }}
                               className='flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-purple-600'
+                              title="View Details"
                             >
                               <Eye size={18} />
                             </button>
+                            {student.status === 'locked' ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUnlockStudent(student.id, studentName);
+                                }}
+                                className='flex items-center justify-center size-8 rounded-lg hover:bg-green-50 text-slate-400 hover:text-green-600'
+                                title="Unban Student"
+                              >
+                                <ShieldCheck size={18} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLockStudent(student.id, studentName);
+                                }}
+                                className='flex items-center justify-center size-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600'
+                                title="Ban Student"
+                              >
+                                <Ban size={18} />
+                              </button>
+                            )}
                             <button
-                              onClick={(e) => e.stopPropagation()}
-                              className='flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600'
-                            >
-                              <Edit3 size={18} />
-                            </button>
-                            <button
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteStudent(student.id, studentName);
+                              }}
                               className='flex items-center justify-center size-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600'
+                              title="Delete Student"
                             >
                               <Trash2 size={18} />
                             </button>
@@ -592,6 +696,36 @@ export function TeacherDashboard() {
 
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open: boolean) => setConfirmDialog({ ...confirmDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmDialog.title}</DialogTitle>
+            <DialogDescription>
+              {confirmDialog.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}
+              className="text-slate-500 hover:bg-slate-100"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                confirmDialog.action();
+                setConfirmDialog({ ...confirmDialog, open: false });
+              }}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

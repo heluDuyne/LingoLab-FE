@@ -4,30 +4,34 @@ import {
   Search,
   Plus,
   Eye,
-  Lock,
-  Unlock,
-  AlertTriangle,
-  X,
+  Ban,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ROUTES } from "@/constants";
 import { userApi } from "@/services/api/users";
 import type { User } from "@/types";
-import { toast } from "sonner";
 
 export function StudentManagementPage() {
   const navigate = useNavigate();
   const [students, setStudents] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Lock status state. test thôi
-  const [lockedStudents, setLockedStudents] = useState<Set<string>>(new Set());
-
-  // Modal state
-  const [showLockModal, setShowLockModal] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
-  const [lockAction, setLockAction] = useState<"lock" | "unlock">("lock");
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => void;
+  }>({ open: false, title: "", description: "", action: () => {} });
 
   // Fetch students on mount
   useEffect(() => {
@@ -37,12 +41,10 @@ export function StudentManagementPage() {
   const fetchStudents = async () => {
     try {
       setIsLoading(true);
-      // Fetch all learners. In future, might want to filter by teacher's classes.
       const response = await userApi.getLearners();
       setStudents(response.data || []);
     } catch (error) {
       console.error("Failed to fetch students", error);
-      toast.error("Failed to load students");
     } finally {
       setIsLoading(false);
     }
@@ -64,58 +66,76 @@ export function StudentManagementPage() {
       return student.email.split('@')[0];
   }
 
-  const getStudentCourse = (studentId: string) => {
-      // Avoid unused variable warning
-      if (!studentId) return "";
-      // Real implementation would check enrollments. 
-      // For now, return placeholder or fetch details if we want N+1 (bad idea).
-      // Or we can update backend to include enrollment counts in list.
-      return "View Details"; 
-  };
-
-  // Deterministic mock data for demo purposes based on ID until backend supports it
-
-
   const handleSelectStudent = (studentId: string) => {
-    // Navigate to student profile/detail. Route needs to be defined.
-    // For now we don't have a dedicated student detail page for teachers yet in this refactor?
-    // Checking routes... ROUTES.TEACHER.STUDENT_DETAIL exists.
     navigate(ROUTES.TEACHER.STUDENT_DETAIL.replace(":studentId", studentId));
   };
 
-  const handleLockClick = (student: User, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedStudent(student);
-    setLockAction(lockedStudents.has(student.id) ? "unlock" : "lock");
-    setShowLockModal(true);
+  const handleLockStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Ban Student Account",
+      description: `Are you sure you want to ban ${studentName}? They will be signed out immediately and unable to access the system until unbanned.`,
+      action: async () => {
+        try {
+          await userApi.lockUser(studentId);
+          alert(`${studentName} has been banned successfully.`);
+          fetchStudents();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to ban student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to ban students.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
   };
 
-  const handleConfirmLock = () => {
-    if (!selectedStudent) return;
-
-    if (lockAction === "lock") {
-      setLockedStudents((prev) => new Set([...prev, selectedStudent.id]));
-      toast.success(`Account locked`, {
-        description: `${getStudentName(selectedStudent)}'s account has been locked.`,
-      });
-    } else {
-      setLockedStudents((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(selectedStudent.id);
-        return newSet;
-      });
-      toast.success(`Account unlocked`, {
-        description: `${getStudentName(selectedStudent)}'s account has been unlocked.`,
-      });
-    }
-
-    setShowLockModal(false);
-    setSelectedStudent(null);
+  const handleUnlockStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Unban Student Account",
+      description: `Are you sure you want to unban ${studentName}? They will be able to access the system again.`,
+      action: async () => {
+        try {
+          await userApi.unlockUser(studentId);
+          alert(`${studentName} has been unbanned successfully.`);
+          fetchStudents();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to unban student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to unban students.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
   };
 
-  const handleCancelLock = () => {
-    setShowLockModal(false);
-    setSelectedStudent(null);
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Delete Student Account",
+      description: `Are you sure you want to permanently delete ${studentName}? This action cannot be undone and will remove all their data, including attempts and scores.`,
+      action: async () => {
+        try {
+          await userApi.deleteUser(studentId);
+          alert(`${studentName} has been deleted successfully.`);
+          fetchStudents();
+        } catch (error: any) {
+          const message = error.response?.data?.message || "Failed to delete student";
+          if (error.response?.status === 403) {
+            alert("Permission denied. You are not authorized to delete students.");
+          } else if (error.response?.data?.error === "Foreign key constraint failed") {
+             alert("Cannot delete student because they have related data (feedbacks, etc) that cannot be automatically removed. Please contact admin.");
+          } else {
+            alert(message);
+          }
+        }
+      },
+    });
   };
 
   return (
@@ -187,11 +207,11 @@ export function StudentManagementPage() {
             </thead>
             <tbody className='divide-y divide-slate-100'>
               {isLoading ? (
-                  <tr><td colSpan={6} className="text-center py-8">Loading students...</td></tr>
+                  <tr><td colSpan={5} className="text-center py-8">Loading students...</td></tr>
               ) : filteredStudents.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className='text-center py-8 text-slate-400 italic'
                   >
                     No students found.
@@ -199,6 +219,8 @@ export function StudentManagementPage() {
                 </tr>
               ) : (filteredStudents.map((student) => {
                 const studentName = getStudentName(student);
+                const isLocked = student.status === 'locked';
+                
                 return (
                   <tr
                     key={student.id}
@@ -217,9 +239,7 @@ export function StudentManagementPage() {
                           {student.avatar ? (
                             <img
                               className={`w-10 h-10 rounded-full object-cover border ${
-                                lockedStudents.has(student.id)
-                                  ? "border-amber-300 opacity-60"
-                                  : "border-slate-200"
+                                isLocked ? "border-amber-300 opacity-60" : "border-slate-200"
                               }`}
                               src={student.avatar}
                               alt={studentName}
@@ -227,7 +247,7 @@ export function StudentManagementPage() {
                           ) : (
                             <div
                               className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg border ${
-                                lockedStudents.has(student.id)
+                                isLocked
                                   ? "bg-slate-100 text-slate-400 border-amber-300"
                                   : "bg-purple-100 text-purple-600 border-purple-200"
                               }`}
@@ -235,24 +255,13 @@ export function StudentManagementPage() {
                               {studentName[0]}
                             </div>
                           )}
-                          {lockedStudents.has(student.id) && (
-                            <div className='absolute -bottom-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center'>
-                              <Lock size={10} className='text-white' />
-                            </div>
-                          )}
                         </div>
                         <div className='flex flex-col'>
                           <div className='flex items-center gap-2'>
-                            <span
-                              className={`text-sm font-semibold ${
-                                lockedStudents.has(student.id)
-                                  ? "text-slate-500"
-                                  : ""
-                              }`}
-                            >
+                            <span className={`text-sm font-semibold ${isLocked ? "text-slate-500" : ""}`}>
                               {studentName}
                             </span>
-                            {lockedStudents.has(student.id) && (
+                            {isLocked && (
                               <span className='inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700'>
                                 Locked
                               </span>
@@ -282,24 +291,40 @@ export function StudentManagementPage() {
                         >
                           <Eye size={18} />
                         </button>
+                        
+                        {isLocked ? (
+                          <button
+                            className='p-2 rounded-md transition-colors text-amber-500 hover:bg-amber-50 hover:text-amber-600'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUnlockStudent(student.id, studentName);
+                            }}
+                            title="Unban Student"
+                          >
+                            <ShieldCheck size={18} />
+                          </button>
+                        ) : (
+                          <button
+                            className='p-2 rounded-md transition-colors text-slate-400 hover:bg-slate-100 hover:text-red-600'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLockStudent(student.id, studentName);
+                            }}
+                            title="Ban Student"
+                          >
+                            <Ban size={18} />
+                          </button>
+                        )}
+
                         <button
-                          className={`p-2 rounded-md transition-colors ${
-                            lockedStudents.has(student.id)
-                              ? "text-amber-500 hover:bg-amber-50 hover:text-amber-600"
-                              : "text-slate-400 hover:bg-slate-100 hover:text-amber-600"
-                          }`}
-                          onClick={(e) => handleLockClick(student, e)}
-                          title={
-                            lockedStudents.has(student.id)
-                              ? "Unlock account"
-                              : "Lock account"
-                          }
+                          className='p-2 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors'
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteStudent(student.id, studentName);
+                          }}
+                          title="Delete Student"
                         >
-                          {lockedStudents.has(student.id) ? (
-                            <Lock size={18} />
-                          ) : (
-                            <Unlock size={18} />
-                          )}
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>
@@ -318,109 +343,35 @@ export function StudentManagementPage() {
         </span>
       </div>
 
-      {/* Lock/Unlock Confirmation Modal */}
-      {showLockModal && selectedStudent && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center'>
-          {/* Backdrop */}
-          <div
-            className='absolute inset-0 bg-black/50 backdrop-blur-sm'
-            onClick={handleCancelLock}
-          />
-
-          {/* Modal */}
-          <div className='relative bg-white rounded-xl shadow-xl max-w-md w-full mx-4 animate-in zoom-in-95 duration-200'>
-            {/* Close button */}
-            <button
-              onClick={handleCancelLock}
-              className='absolute top-4 right-4 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors'
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open: boolean) => setConfirmDialog({ ...confirmDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmDialog.title}</DialogTitle>
+            <DialogDescription>
+              {confirmDialog.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}
+              className="text-slate-500 hover:bg-slate-100"
             >
-              <X size={20} />
-            </button>
-
-            {/* Content */}
-            <div className='p-6'>
-              {/* Icon */}
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                  lockAction === "lock"
-                    ? "bg-amber-100 text-amber-600"
-                    : "bg-green-100 text-green-600"
-                }`}
-              >
-                {lockAction === "lock" ? (
-                  <Lock size={24} />
-                ) : (
-                  <Unlock size={24} />
-                )}
-              </div>
-
-              {/* Title */}
-              <h3 className='text-lg font-bold text-slate-900 text-center mb-2'>
-                {lockAction === "lock"
-                  ? "Lock Student Account"
-                  : "Unlock Student Account"}
-              </h3>
-
-              {/* Description */}
-              <p className='text-slate-500 text-center mb-6'>
-                {lockAction === "lock" ? (
-                  <>
-                    Are you sure you want to lock{" "}
-                    <span className='font-semibold text-slate-700'>
-                      {getStudentName(selectedStudent)}
-                    </span>
-                    's account? They will not be able to access the platform
-                    until unlocked.
-                  </>
-                ) : (
-                  <>
-                    Are you sure you want to unlock{" "}
-                    <span className='font-semibold text-slate-700'>
-                      {getStudentName(selectedStudent)}
-                    </span>
-                    's account? They will regain full access to the platform.
-                  </>
-                )}
-              </p>
-
-              {/* Warning for lock action */}
-              {lockAction === "lock" && (
-                <div className='flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-6'>
-                  <AlertTriangle
-                    size={18}
-                    className='text-amber-600 mt-0.5 shrink-0'
-                  />
-                  <p className='text-sm text-amber-800'>
-                    The student will be logged out immediately and won't be able
-                    to submit any assignments.
-                  </p>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className='flex gap-3'>
-                <Button
-                  variant='ghost'
-                  onClick={handleCancelLock}
-                  className='flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold'
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleConfirmLock}
-                  className={`flex-1 h-11 font-semibold ${
-                    lockAction === "lock"
-                      ? "bg-amber-600 hover:bg-amber-700 text-white"
-                      : "bg-green-600 hover:bg-green-700 text-white"
-                  }`}
-                >
-                  {lockAction === "lock" ? "Lock Account" : "Unlock Account"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                confirmDialog.action();
+                setConfirmDialog({ ...confirmDialog, open: false });
+              }}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
